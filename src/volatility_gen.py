@@ -1,10 +1,13 @@
-# volatility_gen.py
-# Python version of WatDiv/volatility_gen
-# T. Masuda, 2023/12/1
+"""
+volatility_gen.py
+Python version of WatDiv/volatility_gen
+T. Masuda, 2023/12/1
+"""
+
 import bisect
 import random
 import sys
-from enum import Enum, auto
+from enum import Enum
 import math
 from scipy.special import erfinv
 
@@ -33,35 +36,43 @@ from scipy.special import erfinv
 
 
 class VolatilityModel(Enum):
-    NORMAL_DIST = auto
-    LAPLACE_DIST = auto
-    LOGISTIC_DIST = auto
-    CAUCHY_DIST = auto
-    UNDEFINED = auto
-
-
-def sgn(val):
-    """
-
-    Args:
-
-    Returns:
-
-    """
-    return (0 < val) - (val < 0)
+    NORMAL_DIST = 1
+    LAPLACE_DIST = 2
+    LOGISTIC_DIST = 3
+    CAUCHY_DIST = 4
+    UNDEFINED = 5
 
 
 class VolatilityGen:
     """
 
     Attributes:
+        _rd_gen:
+        _uniform_real_distribution:
+        _instantiated (bool):
+        _model_size (int):
+        _location (float):
+        _max_frequency (float):
+        _distribution (VolatilityModel):
+        _frequency_sample (list[float]):
+        _gen_frequency (list[float]):
+        _volatility_sample (list[float]):
+        _gen_volatility (list[float]):
+        _dynamic_frequency_array (list[float]):
+        _cum_density_array (list[float]):
 
     """
 
-    def __init__(self, frequency_sample_file=None, location=None, distribution=None, volatility_sample_file=None, rhs=None):
+# volatility_gen::volatility_gen(const char * frequency_sample_file, double location, VOLATILITY_MODEL::enum_t distribution, const char * volatility_sample_file){
+    def __init__(self, frequency_sample_file: str = None, location: float = None, distribution: VolatilityModel = None, volatility_sample_file: str = None, rhs=None):
         """
 
         Args:
+            frequency_sample_file (str):
+            location (float):
+            distribution (VolatilityModel:
+            volatility_sample_file (str):
+            rhs:
 
         Returns:
 
@@ -80,34 +91,30 @@ class VolatilityGen:
         #         double _max_frequency;
         self._max_frequency: float = 0.0
         #         VOLATILITY_MODEL::enum_t _distribution;
-        self._distribution = None
+        self._distribution: VolatilityModel = VolatilityModel.UNDEFINED
         #         vector<double> _frequency_sample;
-        self._frequency_sample = []
+        self._frequency_sample: list[float] = []
         #         vector<double> _gen_frequency;
-        self._gen_frequency = []
+        self._gen_frequency: list[float] = []
         #         vector<double> _volatility_sample;
-        self._volatility_sample = []
+        self._volatility_sample: list[float] = []
         #         vector<double> _gen_volatility;
-        self._gen_volatility = []
+        self._gen_volatility: list[float] = []
 
         #         double * _dynamic_frequency_array;
-        self._dynamic_frequency_array = []
+        self._dynamic_frequency_array: list[float] = []
         #         double * _cum_density_array;
-        self._cum_density_array = []
+        self._cum_density_array: list[float] = []
 
         #         template <typename T> int sgn(T val) const {
         #             return (T(0) < val) - (val < T(0));
         #         }
         pass
 
-# volatility_gen::volatility_gen(const char * frequency_sample_file, double location, VOLATILITY_MODEL::enum_t distribution, const char * volatility_sample_file){
         if frequency_sample_file is not None and location is not None and distribution is not None and volatility_sample_file is not None:
 #     random_device rd;
-
 #     _rd_gen = new mt19937 (rd());
-
 #     _uniform_real_distribution = new uniform_real_distribution<> (0, 1);
-
 
 #     _instantiated = false;
             self._instantiated = False
@@ -122,33 +129,33 @@ class VolatilityGen:
 #     string token;
 #     ifstream ifs_freq (frequency_sample_file);
             with open(frequency_sample_file, 'r') as ifs_freq:
-                lines = ifs_freq.readlines()
+                lines = ifs_freq.readlines()  # read all the lines at once
 #     if (!ifs_freq){
 #         cerr << "[volatility_gen::volatility_gen]\tFile "<<frequency_sample_file<<" does not exist..." << "\n";
 #         exit(0);
 #     }
 #     while (ifs_freq>>token){
-                for token in lines:
+                for token in lines:  # process each line
 #         double freq_value = boost::lexical_cast<double>(token);
-                    freq_value = float(token)
+                    freq_value = float(token)  # the line contains frequency value
 #         _frequency_sample.push_back(freq_value);
                     self._frequency_sample.append(freq_value)
 #     }
 #     ifs_freq.close();
 #     sort(_frequency_sample.begin(), _frequency_sample.end());
-            self._frequency_sample.sort()
+            self._frequency_sample.sort()  # sort the frequency
 
 #     bool zero_included = false;
             zero_included = False
 #     ifstream ifs_vol (volatility_sample_file);
             with open(volatility_sample_file, 'r') as ifs_vol:
-                lines = ifs_vol.readlines()
+                lines = ifs_vol.readlines()  # read all the lines at once
 #     if (!ifs_vol){
 #         cerr << "[volatility_gen::volatility_gen]\tFile "<<volatility_sample_file<<" does not exist..." << "\n";
 #         exit(0);
 #     }
 #     while (ifs_vol>>token){
-                for token in lines:
+                for token in lines:  # process each line
 #         double vol_value = boost::lexical_cast<double>(token);
                     vol_value = float(token)
 #         if (vol_value==0.0){
@@ -163,15 +170,15 @@ class VolatilityGen:
 #     if (!zero_included){
                 if not zero_included:
 #         _volatility_sample.push_back(0.0);
-                    self._volatility_sample.append(0.0)
+                    self._volatility_sample.append(0.0)  # append zero value
 #     }
 #     sort(_volatility_sample.begin(), _volatility_sample.end());
-            self._volatility_sample.sort()
+            self._volatility_sample.sort()  # sort the vol_value
 # }
         pass  # end of volatility_gen::volatility_gen
 
 # volatility_gen::volatility_gen(const volatility_gen & rhs){
-        if rhs is not None:
+        if rhs is not None:  # when the parameters are given with rhs
 #     random_device rd;
 #     _rd_gen = new mt19937 (rd());
 #     _uniform_real_distribution = new uniform_real_distribution<> (0, 1);
@@ -219,22 +226,23 @@ class VolatilityGen:
 # }
 
 # void volatility_gen::initialize (int model_size){
-    def initialize(self, model_size):
+    def initialize(self, model_size: int):
         """
 
         Args:
+            model_size (int):
 
         Returns:
 
         """
 #     _model_size = model_size;
-        self._model_size = model_size
+        self._model_size: int = model_size
 #     _dynamic_frequency_array = new double [_model_size];
-        self._dynamic_frequency_array = []
+        self._dynamic_frequency_array: list[float] = []
 #     _cum_density_array = new double[_model_size];
-        self._cum_density_array = []
+        self._cum_density_array: list[float] = []
 #     _max_frequency = 0.0;
-        self._max_frequency = 0.0
+        self._max_frequency: float = 0.0
 
 #     double total_frequency = 0.0;
         total_frequency: float = 0.0
@@ -260,8 +268,9 @@ class VolatilityGen:
             self._dynamic_frequency_array[i] = interpolated
 #         total_frequency = total_frequency + interpolated;
             total_frequency = total_frequency + interpolated
-#     }
+#     }  // end of for
             pass  # end of for
+
 #     for (int i=0; i<_model_size; i++){
         for i in range(self._model_size):
 #         double rand_index = next_uniform() * (double)(_volatility_sample.size()-1);
@@ -274,7 +283,7 @@ class VolatilityGen:
             interpolated = range_min + ((range_max - range_min) * (rand_index - math.floor(rand_index)))
 #         _gen_volatility.push_back(interpolated);
             self._gen_volatility.append(interpolated)
-#     }
+#     }  // end of for
             pass  # end of for
 
 #     for (int i=0; i<_model_size; i++){
@@ -287,8 +296,8 @@ class VolatilityGen:
             else:
 #             _cum_density_array[i] = _cum_density_array[i-1] + (_dynamic_frequency_array[i] / total_frequency);
                 self._cum_density_array[i] = self._cum_density_array[i - 1] + (self._dynamic_frequency_array[i] / total_frequency)
-#         }
-#     }
+#         }  // end of if
+#     }  // end of for
             pass  # end of for
 #     _max_frequency = _max_frequency * 1000;
         self._max_frequency = self._max_frequency * 1000
@@ -310,10 +319,12 @@ class VolatilityGen:
 # bool volatility_gen::is_initialized () const{
     def is_initialized(self):
         """
+        Return true if this class is instantiated.
 
         Args:
 
         Returns:
+            bool: true if this class is instantiated
 
         """
 #     return _instantiated;
@@ -328,6 +339,7 @@ class VolatilityGen:
         Args:
 
         Returns:
+            float: total_frequency
 
         """
 #     double total_frequency = 0.0;
@@ -341,20 +353,21 @@ class VolatilityGen:
 #         if (_dynamic_frequency_array[i] < 1.0){
             if self._dynamic_frequency_array[i] < 1.0:
 #             _dynamic_frequency_array[i] = 1.0;
-                self._dynamic_frequency_array[i] = 1.0
+                self._dynamic_frequency_array[i] = 1.0  # lower bound
 #         }
 #         if (_dynamic_frequency_array[i] > _max_frequency){
             if self._dynamic_frequency_array[i] > self._max_frequency:
 #             _dynamic_frequency_array[i] = _max_frequency;
-                self._dynamic_frequency_array[i] = self._max_frequency
+                self._dynamic_frequency_array[i] = self._max_frequency  # upper bound
 #         }
 #         total_frequency += _dynamic_frequency_array[i];
-            total_frequency += self._dynamic_frequency_array[i]
+            total_frequency += self._dynamic_frequency_array[i]  # accumulate the frequency
 #         //cout << "log-increase [" << i << "] = " << ln_inc << "\n";
 #         //cout << "ovr-increase [" << i << "] = " << exp(ln_inc) << "\n";
 #         //cout << "frequency [" << i << "] = " << _dynamic_frequency_array[i] << "\n";
-#     }
+#     }  // end of for
             pass  # end of for
+
 #     for (int i=0; i<_model_size; i++){
         for i in range(self._model_size):
 #         if (i==0){
@@ -367,7 +380,7 @@ class VolatilityGen:
                 self._cum_density_array[i] = self._cum_density_array[i - 1] + (self._dynamic_frequency_array[i] / total_frequency)
 #         }
 #         //cout << "probability [" << i << "] = " << (_dynamic_frequency_array[i] / total_frequency) << "\n";
-#     }
+#     }  // end of for
             pass  # end of for
 #     //cout << "Total frequency = " << total_frequency << "\n";
 #     cerr << "Advancing..." << "\n";
@@ -405,9 +418,9 @@ class VolatilityGen:
 #         double log_increase = log(cur_total / prev_total);
             log_increase = math.log(cur_total / prev_total)
 #         prev_total = cur_total;
-            prev_total = cur_total
+            prev_total = cur_total  # update prev_total
 #         history.push_back(log_increase);
-            history.append(log_increase)
+            history.append(log_increase)  # append to history
 #         if (history.size()>=window_size){
             if len(history) >= window_size:
 #             double sum = 0.0;
@@ -426,13 +439,13 @@ class VolatilityGen:
                     print(f"[volatility_gen::warmup()]\tWarmup phase ended after {i} iterations...")
 #                 break;
                     break
-#             }
-                    pass  # end of if
-#         }
-                pass  # end of if
-#     }
+#             }  // end of if (average < termination_threshold){
+                    pass  # end of if (average < termination_threshold){
+#         }  // end of if (history.size()>=window_size){
+                pass  # end of if (history.size()>=window_size){
+#     }  // end of for
             pass  # end of for
-# }
+# }  // end of volatility_gen::warmup
         pass  # end of volatility_gen::warmup
 
 # int volatility_gen::get_model_size () const{
@@ -442,6 +455,7 @@ class VolatilityGen:
         Args:
 
         Returns:
+            int: len(self._gen_volatility)
 
         """
 #     return _gen_volatility.size();
@@ -454,8 +468,10 @@ class VolatilityGen:
         """
 
         Args:
+            index (int):
 
         Returns:
+            float:
 
         """
 #     return _gen_frequency[index];
@@ -468,8 +484,10 @@ class VolatilityGen:
         """
 
         Args:
+            index (int):
 
         Returns:
+            float:
 
         """
 #     return _gen_volatility[index];
@@ -482,11 +500,13 @@ class VolatilityGen:
         """
 
         Args:
+            index (int):
 
         Returns:
+            float:
 
         """
-        #     double pr = next_uniform();
+#     double pr = next_uniform();
         pr: float = self.next_uniform()
 #     double result = 0.0;
         result = 0.0
@@ -506,7 +526,7 @@ class VolatilityGen:
 #         case VOLATILITY_MODEL::LAPLACE_DIST:{
         elif self._distribution == VolatilityModel.LAPLACE_DIST:
 #             result = _location - (_gen_volatility[index] * sgn<double>(pr - 0.5) * log( 1 - (2 * abs(pr - 0.5)) ));
-            result = self._location + (self._gen_volatility[index] * sgn(pr - 0.5) * math.log(1.0 - (2.0 * abs(pr - 0.5))))
+            result = self._location + (self._gen_volatility[index] * math.copysign(1, pr - 0.5) * math.log(1.0 - (2.0 * abs(pr - 0.5))))
 #             break;
 #         }
 #         case VOLATILITY_MODEL::LOGISTIC_DIST:{
@@ -527,8 +547,10 @@ class VolatilityGen:
         """
 
         Args:
+            index (int):
 
         Returns:
+            float:
 
         """
         #     if (index==0){
@@ -565,10 +587,12 @@ class VolatilityGen:
 # double volatility_gen::next_uniform() const{
     def next_uniform(self):
         """
+        Generate uniform random number.
 
         Args:
 
         Returns:
+            float: uniform random number
 
         """
         #     return (*_uniform_real_distribution)(*_rd_gen);
@@ -578,15 +602,18 @@ class VolatilityGen:
 
     @staticmethod
 # volatility_gen * volatility_gen::parse (const string & line, string & name, float & advance_pr){
-    def parse(line, name=None, advance_pr=None):
+    def parse(line: str, name: str = None, advance_pr: float = None):
         """
 
         Args:
+            line (str):
+            name (str):
+            advance_pr (float):
 
         Returns:
 
         """
-        #     double location = 0.0;
+#     double location = 0.0;
         location = 0.0
 #     VOLATILITY_MODEL::enum_t distribution = VOLATILITY_MODEL::UNDEFINED;
         distribution = VolatilityModel.UNDEFINED
@@ -596,7 +623,7 @@ class VolatilityGen:
         volatility_sample_file = ""
 
 #     stringstream parser(line);
-        parser = line.split(' ')
+        parser = line.split(' ')  # split the input line into tokens
 #     int index = 0;
         index = 0
 #     string token;
@@ -610,7 +637,7 @@ class VolatilityGen:
 #                     cerr<<"[volatility_gen::parse()]\tExpecting #dynamic..."<<"\n";
                     print("[volatility_gen::parse()]\tExpecting #dynamic...")
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error
 #                 }
 #                 break;
 #             }
@@ -651,7 +678,7 @@ class VolatilityGen:
 #                     cerr<<"                         \tExpecting one of NORMAL, CAUCHY, LAPLACE, LOGISTIC..."<<"\n";
                     print("                         \tExpecting one of NORMAL, CAUCHY, LAPLACE, LOGISTIC...")
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error
 #                 }
 #                 break;
 #             }
@@ -682,7 +709,7 @@ class VolatilityGen:
 #         cerr<<"[volatility_gen::parse()]\tUnsupported number of arguments..."<<"\n";
             print("[volatility_gen::parse()]\tUnsupported number of arguments...")
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error
 #     }
 #     return new volatility_gen(frequency_sample_file.c_str(), location, distribution, volatility_sample_file.c_str());
         return VolatilityGen(frequency_sample_file, location, distribution, volatility_sample_file)
@@ -705,7 +732,7 @@ class VolatilityGen:
 #     string name;
 #     float advance_pr;
 #     volatility_gen * v_generator = volatility_gen::parse(line, name, advance_pr);
-        v_generator = VolatilityGen.parse(line)  # , name, advance_pr)
+        v_generator: VolatilityGen = VolatilityGen.parse(line)  # , name, advance_pr)
 #     cout << name << ", " << advance_pr << "\n";
 #         print(name + ", " + advance_pr)
 
@@ -747,3 +774,7 @@ class VolatilityGen:
         pass  # end of volatility_gen::test
 
     pass  # end of VolatilityGen
+
+
+if __name__ == '__main__':
+    VolatilityGen.test()  # does not work because no frequency.txt exists. 2023/12/14

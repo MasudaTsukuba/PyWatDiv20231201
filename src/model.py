@@ -1,6 +1,8 @@
-# model.py
-# Python version of WatDiv
-# T. Masuda, 2023/12/1
+"""
+model.py
+Python version of WatDiv
+T. Masuda, 2023/12/1
+"""
 
 import random
 import sys
@@ -9,6 +11,7 @@ import numpy as np
 from enum import Enum, auto
 import bisect
 from datetime import datetime
+import shlex
 
 # #include "dictionary.h"
 from src.dictionary import Dictionary
@@ -42,7 +45,7 @@ from src.volatility_gen import VolatilityGen
 
 # namespace bpt = boost::posix_time;
 
-# -------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------ start of statistics.py
 # statistics.py
 # Python version of WatDiv/statistics
 # T. Masuda, 2023/12/1
@@ -148,6 +151,7 @@ class QueryCategory(Enum):
 
 class StatisticsST:
     """
+    Class for holding info of a triple.
 
     Attributes:
         _vertex1 (str): subject of a triple
@@ -155,8 +159,8 @@ class StatisticsST:
         _edge (str): predicate of a triple
         _right_distribution (DistributionTypes):
         _group_id (int):
-        _pr_left (float)
-        _pr_right (float)
+        _pr_left (float):
+        _pr_right (float):
     """
 #     string _vertex1;
 #     string _vertex2;
@@ -170,28 +174,34 @@ class StatisticsST:
 # statistics_st::statistics_st (const string & vertex1, const string & vertex2, const string & edge, DISTRIBUTION_TYPES::enum_t right_distribution, int group_id){
     def __init__(self, vertex1: str, vertex2: str, edge: str, right_distribution, group_id: int):
         """
-        Constructor of StatisticsST
+        Constructor of StatisticsST.
 
         Args:
-            vertex1 (str):
+            vertex1 (str): subject
+            vertex2 (str): object
+            edge (str): predicate
+            right_distribution:
+            group_id (int):
+            _pr_left (float):
+            _pr_right (float):
 
         Returns:
 
         """
 #     _vertex1 = vertex1;
-        self._vertex1 = vertex1
+        self._vertex1: str = vertex1
 #     _vertex2 = vertex2;
-        self._vertex2 = vertex2
+        self._vertex2: str = vertex2
 #     _edge = edge;
-        self._edge = edge
+        self._edge: str = edge
 #     _right_distribution = right_distribution;
         self._right_distribution = right_distribution
 #     _group_id = group_id;
-        self._group_id = group_id
+        self._group_id: int = group_id
 #     _pr_left = 0.0;
-        self._pr_left = 0.0
+        self._pr_left: float = 0.0
 #     _pr_right = 0.0;
-        self._pr_right = 0.0
+        self._pr_right: float = 0.0
 # }
         pass  # end of __init__
 
@@ -212,59 +222,70 @@ class StatisticsST:
 
 class Statistics:
     """
+    Class for handling a set of StatisticsST (triple).
+    traverse_graph() method in this class generates query template.
 
     Attributes:
         graph (dict[str, set[StatisticsST]]):
         _spo_index (list[TripleST]):
         _ops_index  (list[TripleST]):
-        _statistics_table (dic[str, (float, float)]
-        _model (Model)
+        _statistics_table (dic[str, (float, float)]):
+        _model (Model):
     """
 
 # statistics::statistics(const model * mdl, const vector<triple_st> & triple_array, int maxQSize, int qCount, int constCount, bool constJoinVertexAllowed, bool dupEdgesAllowed){
-    def __init__(self, mdl, triple_array, maxQSize, qCount, constCount, constJoinVertexAllowed, dupEdgesAllowed):
+    def __init__(self, mdl, triple_array, max_q_size: int, q_count: int, const_count: int, const_join_vertex_allowed: bool, dup_edges_allowed: bool):
         """
+        Constructor of Statistics.
 
         Args:
+            mdl (Model):
+            triple_array:
+            max_q_size (int):
+            q_count (int):
+            const_count (int):
+            const_join_vertex_allowed (bool):
+            dup_edges_allowed (bool):
 
         Returns:
 
         """
 # const model * _model;
 #         map<string, set<statistics_st> > graph; // @suppress("Invalid template argument")
-        self.graph = {}
+        self.graph: dict[str, set[StatisticsST]] = {}
 #         vector<triple_st> _spo_index;
-        self._spo_index = []
+        self._spo_index: list[TripleST] = []
 #         vector<triple_st> _ops_index;
-        self._ops_index = []
+        self._ops_index: list[TripleST] = []
 #         map<string, pair<double, double> > _statistics_table; // @suppress("Invalid template argument")
-        self._statistics_table = {}
+        self._statistics_table: dict[str, tuple[float, float]] = {}
 #     srand (time(NULL));
 #     _model = mdl;
-        self._model = mdl
+        self._model: Model = mdl
 #     index_triples(triple_array);
-        self.index_triples(triple_array)
+        self.index_triples(triple_array)  # set _spo_index and _ops_index
 #     extract_schema(*_model);
-        self.extract_schema(self._model)
+        self.extract_schema(self._model)  # extract schema from model file
 #     //print_graph();
 
-#     ///compute();
+#     //compute();
 #     //print_stats();
 
 #     map<pair<QUERY_STRUCTURE::enum_t, QUERY_CATEGORY::enum_t>, map<string, string> > query_map;
-        query_map = {}
+        query_map: dict[tuple[QueryStructure, QueryCategory], dict[str, str]] = {}
 
-        i = 0
+        i: int = 0
 #     for (int i=0; i<qCount; ){
-        while i < qCount:  # repeat until the number of success reaches qCount
+        while i < q_count:  # repeat until the number of successes reaches qCount
 #         int qSize = (rand() % maxQSize) + 1;
-            qSize = int(random.uniform(0, maxQSize-1)) + 1  # number of triples in a query
+            q_size = int(random.uniform(0, max_q_size - 1)) + 1  # number of triples in a query. 1..max_q_size (max query size).
 #         if (traverse_graph(qSize, constCount, constJoinVertexAllowed, dupEdgesAllowed, query_map)){
-            if self.traverse_graph(qSize, constCount, constJoinVertexAllowed, dupEdgesAllowed, query_map):
+            if self.traverse_graph(q_size, const_count, const_join_vertex_allowed, dup_edges_allowed, query_map):  # generate query template
 #             i++;
                 i += 1  # succeeded
 #         }  // end of if
 #     }  // end of for
+            pass  # end of while
 
 # #     /*
 # #     // Randomly select a subset of queries from each category...
@@ -309,37 +330,39 @@ class Statistics:
 # void statistics::extract_schema(const model & mdl){
     def extract_schema(self, mdl):
         """
+        Extract schema from a model.
+        Only called in the constructor (__init__) of Statistics class.
 
         Args:
-            mdl:
+            mdl (Model): Model class containing the info of a model.
 
         Returns:
 
         """
 #     vector<statistics_st> * result = new vector<statistics_st> ();
-        result = []
+        result: list[StatisticsST] = []  # result to be returned
 #     int group_id = 0;
-        group_id = 0
+        group_id: int = 0
 #     for (vector<resource_m_t*>::const_iterator itr1=mdl._resource_array.begin(); itr1!=mdl._resource_array.end(); itr1++){
-        for itr1 in mdl._resource_array:
+        for itr1 in mdl._resource_array:  # extract resource from model
 #         const resource_m_t * rsrc = *itr1;
-            rsrc = itr1
+            rsrc: ResourceMT = itr1  # resource
 #         for (vector<predicate_group_m_t*>::const_iterator itr2=rsrc->_predicate_group_array.begin(); itr2!=rsrc->_predicate_group_array.end(); itr2++){
-            for itr2 in rsrc._predicate_group_array:
+            for itr2 in rsrc._predicate_group_array:  # resource has predicate_group array
 #             const predicate_group_m_t * pgroup = *itr2;
-                pgroup = itr2
+                pgroup: PredicateGroupMT = itr2  # predicate group in the predicate group array
 #             for (vector<predicate_m_t*>::const_iterator itr3=pgroup->_predicate_array.begin(); itr3!=pgroup->_predicate_array.end(); itr3++){
                 for itr3 in pgroup._predicate_array:
 #                 const predicate_m_t * pred = *itr3;
-                    pred = itr3
+                    pred: PredicateMT = itr3  # predicate in the predicate group
 #                 string vertex1 = "", vertex2 = "", edge = "";
-                    vertex1 = ''
-                    vertex2 = ''
-                    edge = ''
+                    vertex1 = ''  # subject
+                    vertex2 = ''  # object
+                    edge = ''  # predicate
 #                 vertex1.append(rsrc->_type_prefix);
-                    vertex1 += rsrc._type_prefix
+                    vertex1 += rsrc._type_prefix  # e.g., wsdbm:User
 #                 if (pgroup->_type_restriction!=NULL){
-                    if pgroup._type_restriction is not None:
+                    if pgroup._type_restriction is not None:  # predicate group has type restriction
 #                     vertex1.append("@");
                         vertex1 += '@'
 #                     vertex1.append(*pgroup->_type_restriction);
@@ -349,7 +372,7 @@ class Statistics:
 #                     case LITERAL_TYPES::DATE:{
                     if pred._literal_type == LiteralTypes.DATE:
 #                         vertex2.append("date");
-                        vertex2 += 'data'
+                        vertex2 += 'date'
 #                         break;
 #                     }
 #                     case LITERAL_TYPES::INTEGER:{
@@ -372,22 +395,22 @@ class Statistics:
 #                     }
 #                 }
 #                 edge.append(pred->_label);
-                    edge += pred._label
+                    edge += pred._label  # e.g., sorg:jobTitle
 #                 result->push_back(statistics_st(vertex1, vertex2, edge, pred->_distribution_type, group_id));
                     result.append(StatisticsST(vertex1, vertex2, edge, pred._distribution_type, group_id))
 #             }
 #             group_id++;
-                group_id += 1
+                group_id += 1  # increment predicate group
 #         }
 #     }
 #     for (vector<association_m_t*>::const_iterator itr1=mdl._association_array.begin(); itr1!=mdl._association_array.end(); itr1++){
         for itr1 in mdl._association_array:
 #         const association_m_t * assoc = *itr1;
-            assoc = itr1
+            assoc: AssociationMT = itr1  # AssociationMT
 #         string vertex1 = "", vertex2 = "", edge = "";
-            vertex1 = ''
-            vertex2 = ''
-            edge = ''
+            vertex1 = ''  # subject
+            vertex2 = ''  # object
+            edge = ''  # predicate
 #         vertex1.append(assoc->_subject_type);
             vertex1 += assoc._subject_type
 #         if (assoc->_subject_type_restriction!=NULL){
@@ -411,77 +434,81 @@ class Statistics:
 #         result->push_back(statistics_st(vertex1, vertex2, edge, assoc->_right_distribution, group_id));
             result.append(StatisticsST(vertex1, vertex2, edge, assoc._right_distribution, group_id))
 #         group_id++;
-            group_id += 1
+            group_id += 1  # increment predicate group
 #     }
 #     populate_graph(*result);
-        self.populate_graph(result)
+        self.populate_graph(result)  # add tuple (=triple) to graph[vertex], both for subject and object.
 #     infer_edges();
-        self.infer_edges()
+        self.infer_edges()  # add StatisticsST element (triple) of base_vertex to vertex with type restriction.
 #     delete result;
 # }
         pass  # end of extract_schema
 
 # void statistics::populate_graph(const vector<statistics_st> & tuples){
-    def populate_graph(self, tuples):
+    def populate_graph(self, tuples: list[StatisticsST]):
         """
+        Add tuple (=triple) to graph[vertex], both for subject and object.
+        Called only from extract_schema.
 
         Args:
-            tuples:
+            tuples (list[StatisticsST]):
 
         Returns:
 
         """
 #     for (vector<statistics_st>::const_iterator itr1=tuples.begin(); itr1!=tuples.end(); itr1++){
         for itr1 in tuples:
-#         statistics_st tuple = *itr1;
-            tuple = itr1
-#         if (graph.find(tuple._vertex1)==graph.end()){
+#         statistics_st tuple_ = *itr1;
+            tuple_: StatisticsST = itr1  # StatisticsST = Triple
+#         if (graph.find(tuple_._vertex1)==graph.end()){
             try:
-                xxx = self.graph[tuple._vertex1]
+                xxx = self.graph[tuple_._vertex1]  # subject
             except KeyError:
-#             graph.insert(pair<string, set<statistics_st> >(tuple._vertex1, set<statistics_st>()));
-                self.graph[tuple._vertex1] = set()
+#             graph.insert(pair<string, set<statistics_st> >(tuple_._vertex1, set<statistics_st>()));
+                self.graph[tuple_._vertex1] = set()
 #         }
-#         graph[tuple._vertex1].insert(tuple);
-            self.graph[tuple._vertex1].add(tuple)
+#         graph[tuple_._vertex1].insert(tuple_);
+            self.graph[tuple_._vertex1].add(tuple_)  # subject -> triple
 
 # //        int pos = string::npos;
-# //        if ( (pos = tuple._vertex1.find("@"))!=string::npos){
-# //            string inferred_vertex = tuple._vertex1.substr(0, pos);
+# //        if ( (pos = tuple_._vertex1.find("@"))!=string::npos){
+# //            string inferred_vertex = tuple_._vertex1.substr(0, pos);
 # //            if (graph.find(inferred_vertex)==graph.end()){
 # //                graph.insert(pair<string, set<statistics_st> >(inferred_vertex, set<statistics_st>()));
 # //            }
-# //            graph[inferred_vertex].insert(tuple);
+# //            graph[inferred_vertex].insert(tuple_);
 # //        }
 
-#         if (tuple._vertex2.compare("date") !=0 && tuple._vertex2.compare("integer") !=0 && tuple._vertex2.compare("name") !=0 && tuple._vertex2.compare("string")){
-            if tuple._vertex2 != 'date' and tuple._vertex2 != 'integer' and tuple._vertex2 != 'name' and tuple._vertex2 != 'string':
-#             if (graph.find(tuple._vertex2)==graph.end()){
+#         if (tuple_._vertex2.compare("date") !=0 && tuple_._vertex2.compare("integer") !=0 && tuple_._vertex2.compare("name") !=0 && tuple_._vertex2.compare("string")){
+            if tuple_._vertex2.find('date') < 0 and tuple_._vertex2.find('integer') < 0 and tuple_._vertex2.find('name') < 0 and tuple_._vertex2.find('string') < 0:
+#             if (graph.find(tuple_._vertex2)==graph.end()){
                 try:
-                    xxx = self.graph[tuple._vertex2]
+                    xxx = self.graph[tuple_._vertex2]
                 except KeyError:
-#                 graph.insert(pair<string, set<statistics_st> >(tuple._vertex2, set<statistics_st>()));
-                    self.graph[tuple._vertex2] = set()
+#                 graph.insert(pair<string, set<statistics_st> >(tuple_._vertex2, set<statistics_st>()));
+                    self.graph[tuple_._vertex2] = set()
 #             }
-#             graph[tuple._vertex2].insert(tuple);
-                self.graph[tuple._vertex2].add(tuple)
+#             graph[tuple_._vertex2].insert(tuple_);
+                self.graph[tuple_._vertex2].add(tuple_)  # object -> triple  # add triple to graph[vertex]
 
 # //            pos = string::npos;
-# //            if ( (pos = tuple._vertex2.find("@"))!=string::npos){
-# //                string inferred_vertex = tuple._vertex2.substr(0, pos);
+# //            if ( (pos = tuple_._vertex2.find("@"))!=string::npos){
+# //                string inferred_vertex = tuple_._vertex2.substr(0, pos);
 # //                if (graph.find(inferred_vertex)==graph.end()){
 # //                    graph.insert(pair<string, set<statistics_st> >(inferred_vertex, set<statistics_st>()));
 # //                }
-# //                graph[inferred_vertex].insert(tuple);
+# //                graph[inferred_vertex].insert(tuple_);
 # //            }
 #         }
 #     }
 # }
-        pass  # end of
+        pass  # end of populate_graph
 
 # void statistics::infer_edges(){
     def infer_edges(self):
         """
+        Add StatisticsST element (triple) of base_vertex to vertex with type restriction.
+        Called only from extract_schema.
 
         Args:
 
@@ -491,163 +518,169 @@ class Statistics:
 #     for (map<string, set<statistics_st> >::const_iterator itr1=graph.begin(); itr1!=graph.end(); itr1++){
         for itr1_key, iter1_value in self.graph.items():
 #         string vertex = itr1->first;
-            vertex = itr1_key
+            vertex: str = itr1_key  # vertex, either subject or object
 #         int pos = string::npos;
             pos = vertex.find('@')
 #         if ( (pos = vertex.find("@"))!=string::npos){
-            if pos >= 0:
+            if pos >= 0:  # vertex has '@'
 #             string base_vertex = vertex.substr(0, pos);
-                base_vertex = vertex[0: pos]
+                base_vertex = vertex[0: pos]  # extract type prefix
 #             // Insert all edges from base class...
 #             set<statistics_st> base_edges = graph[base_vertex];
-                base_edges = self.graph[base_vertex]
+                base_edges: set[StatisticsST] = self.graph[base_vertex]  # value is a set of triples that have base_vertex
 #             for (set<statistics_st>::iterator itr2=base_edges.begin(); itr2!=base_edges.end(); itr2++){
                 for itr2 in base_edges:
 #                 graph[vertex].insert(*itr2);
-                    self.graph[vertex].add(itr2)
+                    self.graph[vertex].add(itr2)  # add StatisticsST element of base_vertex to vertex with type restriction
 #             }
 #         }
 #     }
 # }
-        pass  # end of
+        pass  # end of infer_edges
 
 # bool statistics::traverse_graph(int max_size, int const_count, bool constJoinVertexAllowed, bool dupEdgesAllowed, map<pair<QUERY_STRUCTURE::enum_t, QUERY_CATEGORY::enum_t>, map<string, string> > & query_map) const{
-    def traverse_graph(self, max_size, const_count, constJoinVertexAllowed, dupEdgesAllowed, query_map):
+    def traverse_graph(self, max_size: int, const_count: int, const_join_vertex_allowed: bool, dup_edges_allowed: bool, query_map):
         """
+        Generate query templates.
 
         Args:
+            max_size (int):
+            const_count (int):
+            const_join_vertex_allowed (bool):
+            dup_edges_allowed (bool):
+            query_map:
 
         Returns:
 
         """
 #     vector<string> v_array;
-        v_array = []
+        v_array: list[str] = []  # list of _id_cursor_map elements
 #     for (map<string, set<statistics_st> >::const_iterator itr1=graph.begin(); itr1!=graph.end(); itr1++){
         for itr1_key, itr1_value in self.graph.items():
 #         v_array.push_back(itr1->first);
-            v_array.append(itr1_key)
+            v_array.append(itr1_key)  # e.g., wsdbm:User, wsdbm:Review, wsdbm:Website, ... 24 elements
 #     }
         pass  # end of for
 
 #     string v = v_array[rand() % v_array.size()];
-        v = v_array[int(random.uniform(0, len(v_array)-1))]
+        v = v_array[int(random.uniform(0, len(v_array)-1))]  # choose randomly from v_array. e.g., wsdbm:Gender
 
 #     set<statistics_st> traversed_edges;
         traversed_edges = set()
 #     //multiset<statistics_st> traversed_edges;
 #     int itr_counter = 0;
-        itr_counter = 0
+        itr_counter = 0  # iteration counter to stop too many iterations
 #     do {
         while True:
 #         vector<statistics_st> potential_edges;
-            potential_edges = []
+            potential_edges: list[StatisticsST] = []
 #         map<string, set<statistics_st> >::const_iterator fit = graph.find(v);
-            fit = self.graph[v]
+            fit = self.graph[v]  # set of triples that has a vertex v
 #         set<statistics_st> incident_edges = fit->second;
-            incident_edges = fit
+            incident_edges: set[StatisticsST] = fit
 #         for (set<statistics_st>::const_iterator itr1=incident_edges.begin(); itr1!=incident_edges.end(); itr1++){
-            for itr1 in incident_edges:
-                found = False
-                if itr1 in traversed_edges:
-                    found = True
+            for itr1 in incident_edges:  # extract an element (StatisticsST = triple) from a set
+                found: bool = False
+                if itr1 in traversed_edges:  # traversed_edges is initially empty
+                    found = True  # already registered in traversed_edges
 #             if (dupEdgesAllowed || traversed_edges.find(*itr1)==traversed_edges.end()){
-                if dupEdgesAllowed or not found:
+                if dup_edges_allowed or not found:
 #                 potential_edges.push_back(*itr1);
-                    potential_edges.append(itr1)
+                    potential_edges.append(itr1)  # append this triple to potential_edges
 #             }
 #         }
 #         if (potential_edges.empty()){
-            if len(potential_edges) == 0:
+            if len(potential_edges) == 0:  # no triple is found
 #             break;
                 break
 #         }
 
 #         statistics_st next_edge = potential_edges[rand() % potential_edges.size()];
-            next_edge = potential_edges[int(random.uniform(0, len(potential_edges)-1))]
+            next_edge: StatisticsST = potential_edges[int(random.uniform(0, len(potential_edges)-1))]  # select one triple
 #         //cout << "\t" << "(" << next_edge._vertex1 << ", " << next_edge._edge << ", " << next_edge._vertex2 << ")" << "\n";
 #         traversed_edges.insert(next_edge);
-            traversed_edges.add(next_edge)
+            traversed_edges.add(next_edge)  # store in traversed_edges
 
 #         vector<string> potential_next_vertices;
             potential_next_vertices = []
 #         if (graph.find(next_edge._vertex1)!=graph.end()){
             try:
-                xxx = self.graph[next_edge._vertex1]
+                xxx = self.graph[next_edge._vertex1]  # subject of a triple, next_edge._vertex1: e.g., wsdbm:User
 #             potential_next_vertices.push_back(next_edge._vertex1);
-                potential_next_vertices.append(next_edge._vertex1)
+                potential_next_vertices.append(next_edge._vertex1)  # e.g., [wsdbm:User]
             except KeyError:
                 pass
 #         }
 #         if (graph.find(next_edge._vertex2)!=graph.end()){
             try:
-                xxx = self.graph[next_edge._vertex2]
+                xxx = self.graph[next_edge._vertex2]  # object of a triple, next_edge._vertex2: e.g., wsdbm:Gender
 #             potential_next_vertices.push_back(next_edge._vertex2);
                 potential_next_vertices.append(next_edge._vertex2)
             except KeyError:
                 pass
 #         }
             if len(potential_next_vertices) == 0:
-                print('potential_next_vertices is empty. ')
-                pass  # error
+                print('ERROR: potential_next_vertices is empty. ')
+                sys.exit(-1)  # error
 #         v = potential_next_vertices[rand() % potential_next_vertices.size()];
-            v = potential_next_vertices[int(random.uniform(0, len(potential_next_vertices)-1))]
+            v = potential_next_vertices[int(random.uniform(0, len(potential_next_vertices)-1))]  # select one vertex randomly . e.g., wsdbm:User
 
 #         itr_counter++;
             itr_counter += 1
 #     } while (traversed_edges.size()<max_size && itr_counter<(max_size*20));
-            if len(traversed_edges) >= max_size:
+            if len(traversed_edges) >= max_size:  # randomly traverse a graph via subject or object
                 break
-            if itr_counter >= max_size * 20:
+            if itr_counter >= max_size * 20:  # too many repeats
                 break
         pass  # end of while
 
 #     // Compute vertices in query graph...
 #     set<string> variable_set;
-        variable_set = set()
+        variable_set: set[str] = set()
 #     string query_str = "";
-        query_str = ''
+        query_str: str = ''
 #     int var_count = 0;
-        var_count = 0
+        var_count: int = 0
 #     map<string, int> q_vertex_map;
-        q_vertex_map = {}
+        q_vertex_map: dict[str, int] = {}
 #     map<string, set<string> > variable_map;
-        variable_map = {}
+        variable_map: dict[str, list[str]] = {}
 #     for (set<statistics_st>::iterator itr1=traversed_edges.begin(); itr1!=traversed_edges.end(); itr1++){
-        for itr1 in traversed_edges:
+        for itr1 in traversed_edges:  # itr1: StatisticsST (= triple)
 #         string var1 = "", var2 = "";
-            var1 = ''
-            var2 = ''
+            var1: str = ''
+            var2: str = ''
 #         string v1_base = itr1->_vertex1, v2_base = itr1->_vertex2;
-            v1_base = itr1._vertex1
-            v2_base = itr1._vertex2
+            v1_base = itr1._vertex1  # subject
+            v2_base = itr1._vertex2  # object
 #         int pos = string::npos;
-            pos = v1_base.find('@')
+            pos: int = v1_base.find('@')
 #         if ((pos=v1_base.find("@"))!=string::npos){
             if pos >= 0:
 #             v1_base = v1_base.substr(0, pos);
-                v1_base = v1_base[0: pos]
+                v1_base = v1_base[0: pos]  # omit after '@'
 #         }
-            pos = v2_base.find('@')
+            pos: int = v2_base.find('@')
 #         if ((pos=v2_base.find("@"))!=string::npos){
             if pos >= 0:
 #             v2_base = v2_base.substr(0, pos);
-                v2_base = v2_base[0: pos]
+                v2_base = v2_base[0: pos]  # omit after '@'
 #         }
 #         if (q_vertex_map.find(v1_base)==q_vertex_map.end()){
             try:
                 xxx = q_vertex_map[v1_base]
             except KeyError:
 #             q_vertex_map.insert(pair<string, int>(v1_base, var_count));
-                q_vertex_map[v1_base] = var_count
+                q_vertex_map[v1_base] = var_count  # vertex -> count (int)
 #             var_count++;
                 var_count += 1
 #         }
             pass  # end of try
 
 #         var1.append("?v");
-            var1 += '?v'
+            var1 += '?v'  # ?v
 #         var1.append(boost::lexical_cast<string>(q_vertex_map[v1_base]));
-            var1 += str(q_vertex_map[v1_base])
+            var1 += str(q_vertex_map[v1_base])  # ?v0, ?v1, ?v2, ...
 #         query_str.append("\t");
             query_str += '\t'
 #         query_str.append(var1);
@@ -655,12 +688,12 @@ class Statistics:
 #         query_str.append("\t");
             query_str += '\t'
 #         query_str.append(itr1->_edge);
-            query_str += itr1._edge
+            query_str += itr1._edge  # predicate
 #         query_str.append("\t");
             query_str += '\t'
 
 #         if (v2_base.compare("date") !=0 && v2_base.compare("integer") !=0 && v2_base.compare("name") !=0 && v2_base.compare("string")){
-            if v2_base != 'date' and v2_base != 'integer' and v2_base != 'name' and v2_base != 'string':
+            if v2_base.find('date') < 0 and v2_base.find('integer') < 0 and v2_base.find('name') < 0 and v2_base.find('string') < 0:
 #             if (q_vertex_map.find(v2_base)==q_vertex_map.end()){
                 try:
                     xxx = q_vertex_map[v2_base]
@@ -673,9 +706,9 @@ class Statistics:
                 pass  # end of if/try
 
 #             var2.append("?v");
-                var2 += '?v'
+                var2 += '?v'  # object part
 #             var2.append(boost::lexical_cast<string>(q_vertex_map[v2_base]));
-                var2 += str(q_vertex_map[v2_base])
+                var2 += str(q_vertex_map[v2_base])  # ?v1, ?v2, ?v3, ...
 #             query_str.append(var2);
                 query_str += var2
 #         } else {
@@ -694,7 +727,7 @@ class Statistics:
 #         query_str.append(" ");
             query_str += ' '
 #         query_str.append(".");
-            query_str += '.'
+            query_str += '.'  # end of a triple
 #         query_str.append("\n");
             query_str += '\n'
 #         if (variable_map.find(var1)==variable_map.end()){
@@ -732,26 +765,26 @@ class Statistics:
 #     /////////////////////////////////////////////////////////////////////////////
 
 #     var_count = 0;
-        var_count = 0
+        var_count: int = 0
 #     map<string, set<statistics_st> > query_graph;
-        query_graph = {}
+        query_graph: dict[str, set[StatisticsST]] = {}
 #     for (set<statistics_st>::iterator itr1 = traversed_edges.begin(); itr1!= traversed_edges.end(); itr1++){
         for itr1 in traversed_edges:
 #         string v1_base = itr1->_vertex1, v2_base = itr1->_vertex2;
             v1_base = itr1._vertex1
             v2_base = itr1._vertex2
 #         int pos = string::npos;
-            pos = v1_base.find('@')
+            pos: int = v1_base.find('@')
 #         if ((pos=v1_base.find("@"))!=string::npos){
             if pos >= 0:
 #             v1_base = v1_base.substr(0, pos);
-                v1_base = v1_base[0: pos]
+                v1_base = v1_base[0: pos]  # extract before '@'
 #         }
-            pos = v2_base.find('@')
+            pos: int = v2_base.find('@')
 #         if ((pos=v2_base.find("@"))!=string::npos){
             if pos >= 0:
 #             v2_base = v2_base.substr(0, pos);
-                v2_base = v2_base[0: pos]
+                v2_base = v2_base[0: pos]  # extract before '@'
 #         }
 #         if (query_graph.find(v1_base)==query_graph.end()){
             try:
@@ -761,10 +794,10 @@ class Statistics:
                 query_graph[v1_base] = set()
 #         }
 #         query_graph[v1_base].insert(*itr1);
-            query_graph[v1_base] = itr1
+            query_graph[v1_base].add(itr1)
 
 #         if (v2_base.compare("date") !=0 && v2_base.compare("integer") !=0 && v2_base.compare("name") !=0 && v2_base.compare("string")){
-            if v2_base != 'date' and v2_base != 'integer' and v2_base != 'name' and v2_base != 'string':
+            if v2_base.find('date') < 0 and v2_base.find('integer') < 0 and v2_base.find('name') < 0 and v2_base.find('string') < 0:
 #             if (query_graph.find(v2_base)==query_graph.end()){
                 try:
                     xxx = query_graph[v2_base]
@@ -773,14 +806,18 @@ class Statistics:
                     query_graph[v2_base] = set()
 #             }
 #             query_graph[v2_base].insert(*itr1);
-                    query_graph[v2_base] = itr1
+                    query_graph[v2_base].add(itr1)
 #         } else {
             else:
 #             string tmp_id = "?v";
-                    tmp_id = '?v'
+                    tmp_id: str = '?v'
 #             tmp_id.append(boost::lexical_cast<string>(var_count));
                     tmp_id += str(var_count)
 #             query_graph[tmp_id].insert(*itr1);
+                    try:
+                        xxx = query_graph[tmp_id]
+                    except KeyError:
+                        query_graph[tmp_id] = set()
                     query_graph[tmp_id].add(itr1)
 #             var_count++;
                     var_count += 1
@@ -956,38 +993,38 @@ class Statistics:
 #         for (map<string, set<string> >::iterator itr=variable_map.begin(); itr!=variable_map.end(); itr++){
         for itr_key, itr_value in variable_map.items():
 #             string var_type = *(itr->second.begin());
-            var_type = itr_value[0]  # #################################################
+            var_type: str = itr_value[0]  # #################################################
 #             if (var_type.compare("date")==0 || var_type.compare("integer")==0 || var_type.compare("name")==0 || var_type.compare("string")==0){
             if var_type == 'date' or var_type == 'integer' or var_type == 'name' or var_type == 'string':
 #                 continue;
                 continue
 #             }
 #             eligible_list.push_back(itr->first);
-            eligible_list.append(itr_key)
+            eligible_list.append(itr_key)  # [?v0, ?v1, ?v2]
 #         }
 #         random_shuffle(eligible_list.begin(), eligible_list.end());
-        random.shuffle(eligible_list)
+        random.shuffle(eligible_list)  # execute in-place shuffle
 
 #         /// Select <const-count> variables...
 #         if (eligible_list.size()>const_count){
         if len(eligible_list) > const_count:
 #             eligible_list.erase(eligible_list.begin()+const_count, eligible_list.end());
-            eligible_list = eligible_list[0: const_count-1]
-#         }
+            eligible_list = eligible_list[0: const_count]  # choose less than the specified number of variables as placeholders
+#         }  // end of if
 
 #         bool varValid = true;
-        varValid = True
+        varValid: bool = True
 #         string mapping = "";
-        mapping = ""
+        mapping: str = ''
 #         for (int vid=0; vid<eligible_list.size(); vid++){
         for eligible in eligible_list:
 #             string var_name = eligible_list[vid];
-            var_name = eligible
+            var_name: str = eligible  # ?v2
 #             string var_root = var_name.substr(1);
-            var_root = var_name[1:]
+            var_root: str = var_name[1:]  # v2
 
 #             mapping.append("#mapping");
-            mapping += '#mapping'
+            mapping += '#mapping'  # create '#mapping' line
 #             mapping.append(" ");
             mapping += ' '
 #             mapping.append(var_root); /// Drop preceding '?'...
@@ -995,40 +1032,40 @@ class Statistics:
 #             mapping.append(" ");
             mapping += ' '
 #             mapping.append(*(variable_map[var_name].begin()));
-            mapping += variable_map[var_name][0]
+            mapping += variable_map[var_name][0]  # type of this variable. e.g. wsdbm:User
 #             mapping.append(" ");
             mapping += ' '
 #             mapping.append("uniform");
-            mapping += 'uniform'
+            mapping += 'uniform'  # distribution is always uniform
 #             mapping.append("\n");
             mapping += '\n'
 
 #             boost::algorithm::replace_all(query_str, var_name + string(" "), string("%") + var_root + string("%") + string(" "));
-            query_str = query_str.replace(f'{var_name} ', f'%{var_root}% ')
+            query_str = query_str.replace(f'{var_name} ', f'%{var_root}% ')  # replace the variable with its placeholder
 #             boost::algorithm::replace_all(query_str, var_name + string("\t"), string("%") + var_root + string("%") + string("\t"));
             query_str = query_str.replace(f'{var_name}\t', f'%{var_root}%\t')
 
 #             if (!constJoinVertexAllowed){
-            if not constJoinVertexAllowed:
+            if not const_join_vertex_allowed:
 #                 string placeholder = string("%") + var_root + string("%");
                 placeholder = f'%{var_root}%'
 #                 if (query_str.find(placeholder)!=string::npos && query_str.find(placeholder)!=query_str.rfind(placeholder)){
                 if query_str.find(placeholder) >= 0 and query_str.find(placeholder) != query_str.rfind(placeholder):
 #                     varValid = false;
-                    varValid = False
-#                 }
-#             }
-#         }
+                    varValid = False  # placeholder variable cannot be a bridge of a graph
+#                 }  // end of if
+#             }  // end of if
+#         }  // end of for
         pass  # end of for
 
 #         bool qValid = false;
-        qValid = False
+        qValid: bool = False
 #         string qTemplate = "";
-        qTemplate = ''
+        qTemplate: str = ''  # query template
 #         qTemplate.append(mapping);
-        qTemplate += mapping
+        qTemplate += mapping  # query template starts with mapping declarations
 #         qTemplate.append("SELECT ");
-        qTemplate += 'SELECT '
+        qTemplate += 'SELECT '  # start the SELECT clause
 #         for (set<string>::iterator itr=variable_set.begin(); itr!=variable_set.end(); itr++){
         for itr in variable_set:
 #             string var_name = *itr;
@@ -1036,30 +1073,30 @@ class Statistics:
 #             if (find(eligible_list.begin(), eligible_list.end(), var_name)==eligible_list.end()){
             if var_name not in eligible_list:
 #                 qTemplate.append(var_name);
-                qTemplate += var_name
+                qTemplate += var_name  # variable names
 #                 qTemplate.append(" ");
-                qTemplate += ' '
+                qTemplate += ' '  # separated with a space
 #                 qValid = true;
                 qValid = True
 #             }
 #         }
 #         qTemplate.append("WHERE {");
-        qTemplate += 'WHERE {'
+        qTemplate += 'WHERE {'  # start the WHERE clause
 #         qTemplate.append("\n");
         qTemplate += '\n'
 #         qTemplate.append(query_str);
-        qTemplate += query_str
+        qTemplate += query_str  # query triples
 #         qTemplate.append("}");
         qTemplate += '}'
 #         qTemplate.append("\n");
         qTemplate += '\n'
 #         qTemplate.append("#end");
-        qTemplate += '#end'
+        qTemplate += '#end'  # end with a #end line
 #         qTemplate.append("\n");
         qTemplate += '\n'
 
 #         if (varValid && qValid){
-        if varValid and qValid:
+        if varValid and qValid:  # both valid flags are true
 #             cout << qTemplate;
             print(qTemplate)
 #             return true;
@@ -1070,13 +1107,15 @@ class Statistics:
 #     */
 
 #     return false;
-        return False
+        return False  # failed
 # }
-        pass  # end of traverse
+        pass  # end of traverse_graph
 
 # void statistics::print_graph() const{
     def print_graph(self):
         """
+        Print the graph.
+        Called in the constructor of Statisrics class, but is not used. Commented out.
 
         Args:
 
@@ -1088,23 +1127,33 @@ class Statistics:
 #     cout<<"digraph rdf {"<<"\n";
         print("digraph rdf {")
 #     for (map<string, set<statistics_st> >::const_iterator itr1=graph.begin(); itr1!=graph.end(); itr1++){
-        for itr1 in self.graph:
+        for itr1_key, itr1_value in self.graph.items():
 #         const set<statistics_st> edge_list = itr1->second;
+            edge_list = itr1_value
 #         cout<< itr1->first << " " << "[" << "label=\"" << itr1->first << "\"];" << "\n";
+            print(f'{itr1_key} ["label="{itr1_key}];')
 #         for (set<statistics_st>::const_iterator itr2=edge_list.begin(); itr2!=edge_list.end(); itr2++){
+            for itr2 in edge_list:
 #             // You need to handle literals separately...
 #             if (itr2->_vertex2.compare("date") !=0 && itr2->_vertex2.compare("integer") !=0 && itr2->_vertex2.compare("name") !=0 && itr2->_vertex2.compare("string")){
+                if itr2._vertex2.find('date') < 0 and itr2._vertex2.find('integer') < 0 and itr2._vertex2.find('name') < 0 and itr2._vertex2.find('string') < 0:
 #                 cout << itr1->first << " -> " << itr2->_vertex2 << " " << "[" << "label=\"" << itr2->_edge << "\"];" << "\n";
+                    print(f'{itr1_key} -> {itr2._vertex2} [label="{itr2._edge}"];')
 #                 //cout << itr2->_vertex2<< " " << "[" << "label=\"" << itr2->_vertex2 << "\"];" << "\n";
 #             } else {
+                else:
 #                 string vertex = "v";
+                    vertex: str = 'v'
 #                 vertex.append(boost::lexical_cast<string>(vertex_counter));
+                    vertex += str(vertex_counter)
 #                 cout << itr1->first << " -> " << vertex << " " << "[" << "label=\"" << itr2->_edge << "\"];" << "\n";
+                    print(f'{itr1_key} -> {vertex} [label="{itr2._edge}"];')
 #                 vertex_counter++;
-#             }
-#         }
-#     }
-            pass  # end of for
+                    vertex_counter += 1
+#             }  // end of if
+#         }  // end of for
+#     }  // end of for
+        pass  # end of for
 #     cout<<"}"<<"\n";
         print("}")
 # }
@@ -1161,8 +1210,10 @@ class Statistics:
 # void statistics::index_triples(const vector<triple_st> & triple_array){
     def index_triples(self, triple_array):
         """
+        Sort the triples in spo order and ops oder.
 
         Args:
+            triple_array (list[TripleST]): list of triples read from *.nt file.
 
         Returns:
 
@@ -1183,10 +1234,15 @@ class Statistics:
         pass  # end of statistics::index_triples
 
 # string statistics::get_key (string entity, string predicate, bool direction, DISTRIBUTION_TYPES::enum_t distribution) const{
-    def get_key(self, entity, predicate, direction, distribution):
+    def get_key(self, entity: str, predicate: str, direction: bool, distribution):
         """
+        Not used.
 
         Args:
+            entity (str):
+            predicate (str):
+            direction (bool):
+            distribution (DistributionTypes):
 
         Returns:
 
@@ -1204,11 +1260,11 @@ class Statistics:
 #     if (direction){
         if direction:
 #         result.append("t");
-            result += "t"
+            result += "t"  # True
 #     } else {
         else:
 #         result.append("f");
-            result += "f"
+            result += "f"  # False
 #     }
         pass  # end of if
 #     result.append("#");
@@ -1306,7 +1362,7 @@ class Statistics:
 
     pass  # end of class Statistics
 
-# -------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------ end of statistics.py
 
 # static unsigned int MAX_LOOP_COUNTER = 50;
 MAX_LOOP_COUNTER = 50
@@ -1356,11 +1412,11 @@ zipfian_cache = {}
 
 
 class LiteralTypes(Enum):
-    INTEGER = auto
-    STRING = auto
-    NAME = auto
-    DATE = auto
-    UNDEFINED = auto
+    INTEGER = 1
+    STRING = 2
+    NAME = 3
+    DATE = 4
+    UNDEFINED = 5
 
 # namespace DISTRIBUTION_TYPES {
 #     enum enum_t {
@@ -1393,10 +1449,10 @@ class DistributionTypes(Enum):
 
 
 class OperationTypes(Enum):
-    ADDITION = auto
-    MULTIPLICATION = auto
-    MOD = auto
-    UNDEFINED = auto
+    ADDITION = 1
+    MULTIPLICATION = 2
+    MOD = 3
+    UNDEFINED = 4
 
 # ostream& operator<<(ostream& os, const triple_st & triple);
 
@@ -1411,10 +1467,13 @@ class OperationTypes(Enum):
 
 def parse_line(line: str) -> list[str]:
     """
+    Parse a line into tokens.
 
     Args:
+        line (str):
 
     Returns:
+        list[str]:
 
     """
     xxx = line.replace('\t\n', '')
@@ -1431,19 +1490,24 @@ def parse_line(line: str) -> list[str]:
 # };
 class TripleST:
     """
-    Stores a triple
+    Stores a triple.
 
     Attributes:
         _subject (str): subject of a triple
         _predicate (str): predicate of a triple
         _object (str): object of a triple
+        result (list[]):
 
     """
 # triple_st::triple_st (const string & line){
-    def __init__(self, line=None, subject=None, predicate=None, object0=None):
+    def __init__(self, line: str = None, subject: str = None, predicate: str = None, object_: str = None):
         """
 
         Args:
+            line (str):
+            subject (str):
+            predicate (str):
+            object_ (str):
 
         Returns:
 
@@ -1458,17 +1522,26 @@ class TripleST:
 #     triple_st (const string & line);
 #     triple_st (const string & subject, const string & predicate, const string & object);
 #     bool operator== (const triple_st & rhs) const;
-#
+
+        def tokenize_string(input_string: str):
+            lexer = shlex.shlex(input_string)
+            lexer.quotes = '"'
+            lexer.whitespace_split = True
+            lexer.commenters = ''
+            return  list(lexer)
+
 #     static vector<triple_st> parse_file (const char * filename);
 #     vector<string> result;
         self.result = []
-        if line is not None:
+        if line is not None:  # input arg is a line
 #     string trimmed = line.substr(0, line.find_last_of("."));
-            trimmed = line[:line.rfind('.')]
+            trimmed = line[:line.rfind('.')]  # omit the last period
 #     boost::trim(trimmed);
             trimmed = trimmed.strip()
 #     boost::algorithm::split(result, trimmed, boost::is_any_of("\t"));
-            result = trimmed.split('\t')
+            trimmed = trimmed.replace('\t', ' ')
+            # result = trimmed.split(' ')  # elements of a triple is separated with tabs
+            result = tokenize_string(trimmed)
 #     _subject = result[0];
             self._subject = result[0]
 #     _predicate = result[1];
@@ -1478,14 +1551,15 @@ class TripleST:
 # }
 
 # triple_st::triple_st (const string & subject, const string & predicate, const string & object){
-        if subject is not None and predicate is not None and object0 is not None:
+        if subject is not None and predicate is not None and object_ is not None:  # input args are not a line
 #     _subject = subject;
             self._subject = subject
 #     _predicate = predicate;
             self._predicate = predicate
 #     _object = object;
-            self._object = object0
+            self._object = object_
 # }
+        pass  # end of __init__
 
 # bool triple_st::operator== (const triple_st & rhs) const{
 #     return _subject.compare(rhs._subject)==0 && _predicate.compare(rhs._predicate)==0 && _object.compare(rhs._object)==0;
@@ -1493,37 +1567,39 @@ class TripleST:
 
     @staticmethod
 # vector<triple_st> triple_st::parse_file (const char * filename){
-    def parse_file(filename):
+    def parse_file(filename: str):
         """
-        Read triples from an RDF file
+        Read triples from an RDF file.
 
         Args:
             filename (str): path to an RDF file
-        Returns:
 
+        Returns:
+            list[TripleST]: list of triples
         """
 #     vector<triple_st> result;
 #     ifstream ifs (filename);
         with open(filename, 'r') as ifs:  # open an RDF file
             lines = ifs.readlines()  # read all the lines in the file
-            result: list[str] = [None] * len(lines)  # prepare a list
+            result: list[TripleST] = []  # * len(lines)  # prepare a list
 #     string line;
 #     while ( getline(ifs, line) ){
             for index, line in enumerate(lines):
 #         triple_st cur_triple (line);
-                cur_triple: TripleST = TripleST(line=line)
+                cur_triple: TripleST = TripleST(line=line)  # tab separated sub, pred, obj
 #         result.push_back(cur_triple);
-                result[index] = cur_triple
+#                 result[index] = cur_triple
+                result.append(cur_triple)
 #         cout << cur_triple << "\n";
 #                 print(f'{cur_triple._subject}\t{cur_triple._predicate}\t{cur_triple._object}')
-                if index % 100000 == 0:
+                if index % 100000 == 0:  # to suppress a massive output
                     print('.', end='')  # progress indicator, because this step takes long time
 
 #     }
             print()  # CR
 #     ifs.close();
 #     return result;
-        return result
+        return result  # list[TripleST]
 # }
         pass  # end of parse_file
     pass  # end of TripleST
@@ -1576,8 +1652,11 @@ class NamespaceMT:
 # namespace_m_t::namespace_m_t (string token){
     def __init__(self, token: str):
         """
+        Create an NamespaceMT instance from a token string.
+        Token example is dc=http://purl.org/dc/terms/
 
         Args:
+            token (str):
 
         Returns:
 
@@ -1587,40 +1666,43 @@ class NamespaceMT:
 #     string                          _prefix;
         self._prefix = ''
 #     unsigned int pos = token.find_first_of('=');
-        pos = token.find('=')
-        token_split = token.split('=')
+        pos: int = token.find('=')  # split with '='
+        token_split: list[str] = token.split('=')
 #     if (pos!=string::npos){
         if pos >= 0:
 #         _alias = token.substr(0, pos);
-            self._alias = token_split[0]
+            self._alias = token_split[0]  # dc
 #         _prefix = token.substr(pos+1);
-            self._prefix = token_split[1]
+            self._prefix = token_split[1]  # http://purl.org/dc/terms/
 #         //cout<<"namespace ["<<_alias<<"]-->["<<_prefix<<"] generated..."<<"\n";
 #     } else {
         else:
 #         cerr<<"[namespace_m_t::namespace_m_t] Expected [alias]:[prefix]..."<<"\n";
             print('[namespace_m_t::namespace_m_t] Expected [alias]:[prefix]...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # token does not contain '='
 #     }
 # }
         pass  # end of namespace_m_t::namespace_m_t
 
     @staticmethod
 # namespace_m_t * namespace_m_t::parse (const string & line){
-    def parse(line):
+    def parse(line: str):
         """
+        Parse #namespace line.
+        e.g., #namespace	dc=http://purl.org/dc/terms/
 
         Args:
+            line (str): Input line.
 
         Returns:
-
+            NamespaceMT: namespace_mt instance.
         """
 #     string namespace_declaration;
         namespace_declaration: str = ''
 #
 #     stringstream parser(line);
-        parser = parse_line(line)
+        parser: list[str] = parse_line(line)  # split into tokens
 #     int index = 0;
         index: int = 0
 #     string token;
@@ -1635,56 +1717,36 @@ class NamespaceMT:
 #                     cerr<<"[predicate_m_t::parse()]\tExpecting #namespace..."<<"\n";
                     print('[predicate_m_t::parse()]\tExpecting #namespace...')
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error  # first token must be ""#namespace"
 #                 }
 #                 break;
 #             }
 #             case 1:{
             if index == 1:
 #                 namespace_declaration = token;
-                namespace_declaration = token
+                namespace_declaration = token  # dc=http://purl.org/dc/terms/
 #                 break;
 #             }
 #         }
 #         index++;
             index += 1
 #     }
-#
+
 #     if (index==2){
         if index == 2:
 #         return new namespace_m_t(namespace_declaration);
-            return NamespaceMT(namespace_declaration)
+            return NamespaceMT(namespace_declaration)  # call constructor and return the instance
 #     } else {
         else:
 #         cerr<<"[namespace_m_t::parse()]\tExpecting 1 argument..."<<"\n";
             print('[namespace_m_t::parse()]\tExpecting 1 argument...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # number of tokens is not 2
 #     }
+        pass  # end of if
 # }
-        pass  # end of
+        pass  # end of parse
 
-# void namespace_map::to_str (vector<string> & lines) const{
-    def to_str(self, lines):
-        """
-
-        Args:
-
-        Returns:
-
-        """
-#     for (map<string, string>::const_iterator itr=_index.begin(); itr!=_index.end(); itr++){
-        for itr in self._index:
-#         string line = "";
-#         line.append(itr->first);
-#         line.append(" ");
-#         line.append(itr->second);
-            line = f'{itr.first} {itr.second}'
-#         lines.push_back(line);
-            lines.append(line)
-#     }
-# }
-        pass  # end of to_str
     pass  # end of NamespaceMT
 
 
@@ -1692,6 +1754,7 @@ class TypeMap:
     """
 
     Attributes:
+        _index:
 
     """
 # class type_map {
@@ -1720,8 +1783,8 @@ class TypeMap:
         """
 #         unordered_map<string, unordered_set<string> > _index; // @suppress("Invalid template argument")
         self._index = {}
-#
 # }
+        pass  # end of __init__
 
 # type_map::~type_map(){
 #
@@ -1730,6 +1793,7 @@ class TypeMap:
 # void type_map::clear(){
     def clear(self):
         """
+        Clear _index.
 
         Args:
 
@@ -1739,60 +1803,67 @@ class TypeMap:
     #     _index.clear();
         self._index = {}
 # }
+        pass  # end of clear
 
 # void type_map::insert (const string & instance, const string & type){
-    def insert(self, instance, type0):
+    def insert(self, instance: str, type_: str):
         """
 
         Args:
+            instance (str):
+            type_ (str):
 
         Returns:
 
         """
 #     if (_index.find(type)==_index.end()){
         try:
-            xxx = self._index[type0]
+            xxx = self._index[type_]
 #         _index.insert(pair<string, unordered_set<string> >(type, unordered_set<string>()));
         except KeyError:
-            self._index[type0] = set()
+            self._index[type_] = set()
 #     }
 #     _index[type].insert(instance);
-        self._index[type0].add(instance)
+        self._index[type_].add(instance)
 # }
         pass  # end of clear
 
 # bool type_map::instanceof (const string & instance, const string & type) const{
-    def instance_of(self, instance, type0):
+    def instance_of(self, instance: str, type_: str):
         """
 
         Args:
+            instance (str):
+            type_ (str):
 
         Returns:
 
         """
 #     unordered_map<string, unordered_set<string> >::const_iterator f_it1 = _index.find(type);
         try:
-            f_it1 = self._index[type0]
+            f_it1 = self._index[type_]
 #     if (f_it1!=_index.end()){
 #         unordered_set<string>::const_iterator f_it2 = f_it1->second.find(instance);
 #         if (f_it2!=f_it1->second.end()){
             if instance in f_it1:
 #             return true;
                 return True
-#         }
-#     }
+#         }  // end of if
+#     }  // end of if
         except KeyError:
-#     return false;
             pass
+#     return false;
         return False
 # }
         pass  # end of instance_of
 
 # vector<string> * type_map::get_instances (const string & entity, const string & type) const{
-    def get_instances(self, entity, type0):
+    def get_instances(self, entity: str, type_: str):
         """
 
         Args:
+            entity (str):
+            type_ (str):
 
         Returns:
 
@@ -1800,7 +1871,7 @@ class TypeMap:
 #     //cout<<"Looking up type restriction:"<<type<<"\n";
 #     unordered_map<string, unordered_set<string> >::const_iterator f_it1=_index.find(type);
         try:
-            f_it1 = self._index[type0]
+            f_it1 = self._index[type_]
 #     if (f_it1!=_index.end()){
 #         vector<string> * result = new vector<string>();
 #         for (unordered_set<string>::const_iterator f_it2=f_it1->second.begin(); f_it2!=f_it1->second.end(); f_it2++){
@@ -1851,6 +1922,7 @@ class TypeMap:
 # void type_map::to_str (vector<string> & lines) const{
     def to_str(self):
         """
+        Convert type_map info into string line to store in a file.
 
         Args:
 
@@ -1908,10 +1980,12 @@ class PredicateMT:
 # };
 
 # void predicate_m_t::init(string label, LITERAL_TYPES::enum_t literal_type){
-    def init(self, label, literal_type):
+    def init(self, label: str, literal_type):
         """
 
         Args:
+            label (str):
+            literal_type (LiteralTypes):
 
         Returns:
 
@@ -1956,10 +2030,16 @@ class PredicateMT:
 # }
 
 # predicate_m_t::predicate_m_t (string label, LITERAL_TYPES::enum_t literal_type){
-    def __init__(self, label='', literal_type=None, range_min='', range_max='', distribution_type=None, rhs=None):
+    def __init__(self, label: str = '', literal_type=None, range_min: str = '', range_max: str = '', distribution_type=None, rhs=None):
         """
 
         Args:
+            label (str):
+            literal_type
+            range_min (str):
+            range_max (str):
+            distribution_type
+            rhs
 
         Returns:
 
@@ -2002,9 +2082,9 @@ class PredicateMT:
         pass  # end of predicate_m_t::predicate_m_t (string label, LITERAL_TYPES::enum_t literal_type, string range_min, string range_max, DISTRIBUTION_TYPES::enum_t distribution_type)
 
 # predicate_m_t::predicate_m_t (const predicate_m_t & rhs){
-        if rhs is not None:
+        if rhs is not None:  # if the argument is given with rhs
 #     _label = rhs._label;
-            self._label = rhs._label
+            self._label = rhs._label  # copy the properties of rhs into the current instance
 #     _literal_type = rhs._literal_type;
             self._literal_type = rhs._literal_type
 #     _range_min = rhs._range_min;
@@ -2018,27 +2098,29 @@ class PredicateMT:
 
     @staticmethod
 # predicate_m_t * predicate_m_t::parse (const string & line){
-    def parse(line):
+    def parse(line: str):
         """
+        Parse the #predicate line and create PredicateMT instance.
 
         Args:
+            line (str): label-literal_type-range_min-range_max-distribution_type, e.g., #predicate	sorg:contentRating	integer	6 18
 
         Returns:
 
         """
 #     string label;
-        label = ''
+        label: str = ''
 #     LITERAL_TYPES::enum_t literal_type = LITERAL_TYPES::UNDEFINED;
-        literal_type = LiteralTypes.UNDEFINED
+        literal_type: LiteralTypes = LiteralTypes.UNDEFINED
 #     string range_min;
-        range_min = ''
+        range_min: str = ''
 #     string range_max;
-        range_max = ''
+        range_max: str = ''
 #     DISTRIBUTION_TYPES::enum_t distribution_type = DISTRIBUTION_TYPES::UNDEFINED;
-        distribution_type = DistributionTypes.UNDEFINED
+        distribution_type: DistributionTypes = DistributionTypes.UNDEFINED
 #
 #     stringstream parser(line);
-        parser = parse_line(line)
+        parser: list[str] = parse_line(line)  # split the line into tokens
 #     int index = 0;
         index: int = 0
 #     string token;
@@ -2053,18 +2135,18 @@ class PredicateMT:
 #                     cerr<<"[predicate_m_t::parse()]\tExpecting #predicate..."<<"\n";
                     print('[predicate_m_t::parse()]\tExpecting #predicate...')
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error, must start with #predicate
 #                 }
 #                 break;
 #             }
 #             case 1:{
             elif index == 1:
 #                 label = token;
-                label = token
+                label = token  # second token is a label
 #                 break;
 #             }
 #             case 2:{
-            elif index == 2:
+            elif index == 2:  # third token is a literal_type
 #                 if (token.compare("integer")==0 || token.compare("INTEGER")==0){
                 if token == 'integer' or token == 'INTEGER':
 #                     literal_type = LITERAL_TYPES::INTEGER;
@@ -2087,7 +2169,7 @@ class PredicateMT:
 #             case 3:{
             elif index == 3:
 #                 range_min = token;
-                range_min = token
+                range_min = token  # this may not exist
 #                 break;
 #             }
 #             case 4:{
@@ -2097,7 +2179,7 @@ class PredicateMT:
 #                 break;
 #             }
 #             case 5:{
-            elif index == 5:
+            elif index == 5:  # distribution_type
 #                 if (token.compare("uniform")==0 || token.compare("UNIFORM")==0){
                 if token == 'uniform' or token == 'UNIFORM':
 #                     distribution_type = DISTRIBUTION_TYPES::UNIFORM;
@@ -2128,7 +2210,7 @@ class PredicateMT:
 #         return new predicate_m_t(label, literal_type, range_min, range_max);
             return PredicateMT(label=label, literal_type=literal_type, range_min=range_min, range_max=range_max)
 #     } else if (index==6){
-        if index == 5:
+        if index == 6:
 #         return new predicate_m_t(label, literal_type, range_min, range_max, distribution_type);
             return PredicateMT(label=label, literal_type=literal_type, range_min=range_min, range_max=range_max, distribution_type=distribution_type)
 #     } else {
@@ -2136,7 +2218,7 @@ class PredicateMT:
 #         cerr<<"[predicate_m_t::parse()]\tExpecting 2, 3 or 5 arguments..."<<"\n";
             print('[predicate_m_t::parse()]\tExpecting 2, 3 or 5 arguments...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # invlid input line
 #     }
         pass  # end of if
 # }
@@ -2147,6 +2229,7 @@ class PredicateMT:
         """
 
         Args:
+            n_map:
 
         Returns:
 
@@ -2154,7 +2237,7 @@ class PredicateMT:
 #     string result = "";
         result: str = ''
 #     string literal = model::generate_literal(_literal_type, _distribution_type, _range_min, _range_max);
-        literal = Model.generate_literal(self._literal_type, self._distribution_type, self._range_min, self._range_max)
+        literal: str = Model.generate_literal(self._literal_type, self._distribution_type, self._range_min, self._range_max)
 #     result.append("<");
         result += '<'
 #     result.append(n_map.replace(_label));
@@ -2203,6 +2286,9 @@ class PredicateGroupMT:
         """
 
         Args:
+            gen_probability:
+            type_restriction:
+            rhs:
 
         Returns:
 
@@ -2214,7 +2300,7 @@ class PredicateGroupMT:
     #     string *                        _type_restriction;
         self._type_restriction: str = ''
     #     vector<predicate_m_t*>          _predicate_array;
-        self._predicate_array = []
+        self._predicate_array: list[PredicateMT] = []
     #     _post_process = false;
 #     _gen_probability = gen_probability;
         if gen_probability is not None:
@@ -2260,10 +2346,12 @@ class PredicateGroupMT:
 
     @staticmethod
 # predicate_group_m_t * predicate_group_m_t::parse (const string & line){
-    def parse(line):
+    def parse(line: str):
         """
+        Parse a line started with <pgroup> and create PredicateGroupMT instance.
 
         Args:
+            line (str): input line to be parsed, e.g., <pgroup>	1.0
 
         Returns:
 
@@ -2271,10 +2359,10 @@ class PredicateGroupMT:
 #     float gen_probability = 1.0;
         gen_probability: float = 1.0
 #     string type_restriction;
-        type_restriction = ''
+        type_restriction: str = ''
 
 #     stringstream parser(line);
-        parser = parse_line(line)
+        parser: list[str] = parse_line(line)  # split the line into tokens
 #     int index = 0;
         index: int = 0
 #     string token;
@@ -2288,27 +2376,27 @@ class PredicateGroupMT:
 #                     cerr<<"[predicate_group_m_t::parse()]\tExpecting <pgroup>..."<<"\n";
                     print('[predicate_group_m_t::parse()]\tExpecting <pgroup>...')
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error  # line must start with '<pgroup>'
 #                 }
 #                 break;
 #             }
 #             case 1:{
             if index == 1:
 #                 gen_probability = boost::lexical_cast<float>(token);
-                gen_probability = float(token)
+                gen_probability: float = float(token)  # second token represents gen_probability
 #                 break;
 #             }
 #             case 2:{
-            if index == 2:
+            if index == 2:  # e.g., <pgroup>	0.8			@wsdbm:ProductCategory0
 #                 if (!boost::starts_with(token, "@")){
                 if not token.startswith('@'):
 #                     cerr<<"[predicate_group_m_t::parse()]\tExpecting '@' qualifier before type restriction..."<<"\n";
-                    print('[predicate_group_m_t::parse()]\tExpecting '@' qualifier before type restriction...')
+                    print("[predicate_group_m_t::parse()]\tExpecting '@' qualifier before type restriction...")
 #                     exit(0);
                     sys.exit(0)
 #                 }
 #                 type_restriction = token.substr(1);
-                type_restriction = token[1:]
+                type_restriction = token[1:]  # wsdbm:ProductCategory0
 #                 break;
 #             }
 #         }
@@ -2333,7 +2421,7 @@ class PredicateGroupMT:
 #         cerr<<"[predicate_group_m_t::parse()]\tExpecting 0, 1 or 2 arguments..."<<"\n";
             print('[predicate_group_m_t::parse()]\tExpecting 0, 1 or 2 arguments...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error  # invelid input line
 #     }
 # }
     pass  # end of PredicateGroupMT
@@ -2344,6 +2432,10 @@ class ResourceMT:
     """
 
     Attributes:
+        _scalable (bool):
+        _type_prefix (str):
+        _scaling_coefficient (int):
+        _predicate_group_array (list[PredicateGroupMT]):
 
     """
 #     resource_m_t (bool scalable, string type_prefix, unsigned int scaling_coefficient);
@@ -2357,22 +2449,26 @@ class ResourceMT:
 # };
 
 # resource_m_t::resource_m_t (bool scalable, string type_prefix, unsigned int scaling_coefficient){
-    def __init__(self, scalable=None, type_prefix=None, scaling_coefficient=None, rhs=None):
+    def __init__(self, scalable: bool = None, type_prefix: str = None, scaling_coefficient: int = None, rhs=None):
         """
 
         Args:
+            scalable (bool):
+            type_prefix (str):
+            scaling_coefficient (int):
+            rhs
 
         Returns:
 
         """
 #     bool                            _scalable;
-        self._scalable = False
+        self._scalable: bool = False
 #     string                          _type_prefix;
-        self._type_prefix = ''
+        self._type_prefix: str = ''
 #     unsigned int                    _scaling_coefficient;
-        self._scaling_coefficient = 0
+        self._scaling_coefficient: int = 0
 #     vector<predicate_group_m_t*>    _predicate_group_array;
-        self._predicate_group_array = []
+        self._predicate_group_array: list[PredicateGroupMT] = []
         if scalable is not None and type_prefix is not None and scaling_coefficient is not None:
 #     _scalable = scalable;
             self._scalable = scalable
@@ -2384,7 +2480,7 @@ class ResourceMT:
         pass  # end of resource_m_t::resource_m_t (bool scalable, string type_prefix, unsigned int scaling_coefficient)
 
 # resource_m_t::resource_m_t (const resource_m_t & rhs){
-        if rhs is not None:
+        if rhs is not None:  # info is given by rhs
 #     _scalable = rhs._scalable;
             self._scalable = rhs._scalable
 #     _type_prefix = rhs._type_prefix;
@@ -2397,6 +2493,7 @@ class ResourceMT:
                 self._predicate_group_array.append(PredicateGroupMT(rhs=ppp))
 #     }
 # }
+        pass  # end of __init__
 
 # resource_m_t::~resource_m_t (){
 #     for (unsigned int i=0; i<_predicate_group_array.size(); i++){
@@ -2405,10 +2502,13 @@ class ResourceMT:
 # }
 
 # void resource_m_t::generate (const namespace_map & n_map, map<string, unsigned int> & id_cursor_map){
-    def generate(self, n_map, id_cursor_map):
+    def generate(self, n_map, id_cursor_map: dict[str, int]):
         """
+        Generate ResourceMT instance.
 
         Args:
+            n_map (NamespaceMap):
+            id_cursor_map (dict[str, int]):  dict of _type_prefix -> _scaling_coefficient
 
         Returns:
 
@@ -2446,9 +2546,9 @@ class ResourceMT:
 #                     for (vector<predicate_m_t*>::const_iterator itr3=predicate_group->_predicate_array.begin(); itr3!=predicate_group->_predicate_array.end(); itr3++){
                         for itr3 in predicate_group._predicate_array:
 #                         predicate_m_t * predicate = *itr3;
-                            predicate = itr3
+                            predicate: PredicateMT = itr3
 #                         string triple_str = "";
-                            triple_str = ''
+                            triple_str: str = ''
 #                         triple_str.append(subject);
                             triple_str += subject
 #                         triple_str.append("\t");
@@ -2463,7 +2563,7 @@ class ResourceMT:
 
 #                         //triple_lines.push_back(triple_st(triple_str.substr(0, tab1_index), triple_str.substr((tab1_index+1), (tab2_index-tab1_index-1)), triple_str.substr(tab2_index+1)));
 #                         triple_st line (triple_str.substr(0, tab1_index), triple_str.substr((tab1_index+1), (tab2_index-tab1_index-1)), triple_str.substr(tab2_index+1));
-                            line = TripleST(subject=triple_str[:tab1_index], predicate=triple_str[tab1_index+1:tab2_index], object0=triple_str[tab2_index + 1:])
+                            line = TripleST(subject=triple_str[:tab1_index], predicate=triple_str[tab1_index+1:tab2_index], object_=triple_str[tab2_index + 1:])
 #                         cout<<line<<" .\n";
                             print(line, ' .')
 #                     }
@@ -2481,6 +2581,9 @@ class ResourceMT:
         """
 
         Args:
+            n_map
+            t_map
+            id_cursor_map
 
         Returns:
 
@@ -2501,7 +2604,7 @@ class ResourceMT:
 #             predicate_group_m_t * predicate_group = *itr2;
                 predicate_group = itr2
 #             if (predicate_group->_post_process && t_map.instanceof(subject, n_map.replace(*(predicate_group->_type_restriction)))){
-                if predicate_group._post_process and t_map.instance_of(subject, n_map.replace(predicate_group._type_restriction)):
+                if predicate_group._post_process and predicate_group._type_restriction is not None and t_map.instance_of(subject, n_map.replace(predicate_group._type_restriction)):
 #                 float draw = ((float) rand())/((float)RAND_MAX);
                     draw = random.uniform(0, 1)
 #                 if (draw<=predicate_group->_gen_probability){
@@ -2530,7 +2633,7 @@ class ResourceMT:
 
 #                         //triple_lines.push_back(triple_st(triple_str.substr(0, tab1_index), triple_str.substr((tab1_index+1), (tab2_index-tab1_index-1)), triple_str.substr(tab2_index+1)));
 #                         triple_st line (triple_str.substr(0, tab1_index), triple_str.substr((tab1_index+1), (tab2_index-tab1_index-1)), triple_str.substr(tab2_index+1));
-                            line = TripleST(subject=triple_str[:tab1_index], predicate=triple_str[tab1_index+1: tab2_index], object0=triple_str[tab2_index + 1:])
+                            line = TripleST(subject=triple_str[:tab1_index], predicate=triple_str[tab1_index+1: tab2_index], object_=triple_str[tab2_index + 1:])
 #                         cout<<line<<" .\n";
                             print(line, ' .')
 #                     }
@@ -2539,29 +2642,31 @@ class ResourceMT:
 #         }
 #     }
 # }
-        pass  # end of
+        pass  # end of process_type_restrictions
 
     @staticmethod
 # resource_m_t * resource_m_t::parse (const string & line){
-    def parse(line):
+    def parse(line: str):
         """
+        Parse a line started with <type> or <type*> tags.
 
         Args:
+            line (str): input line to be parsed. type_prefix, scaling_coefficient: e.g., <type>		wsdbm:Retailer 12
 
         Returns:
 
         """
 #     bool scalable = true;
-        scalable = True
+        scalable: bool = True
 #     string type_prefix ("not_defined");
-        type_prefix = 'not_defined'
+        type_prefix: str = 'not_defined'
 #     unsigned int scaling_coefficient = 0;
         scaling_coefficient: int = 0
 
 #     stringstream parser(line);
-        parser = parse_line(line)
+        parser: list[str] = parse_line(line)  # split the line into tokens
 #     int index = 0;
-        index = 0
+        index: int = 0
 #     string token;
 #     while (parser>>token){
         for token in parser:
@@ -2573,7 +2678,7 @@ class ResourceMT:
 #                     cerr<<"[resource_m_t::parse()]\tExpecting <type> or <type*>..."<<"\n";
                     print('[resource_m_t::parse()]\tExpecting <type> or <type*>...')
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error  # must start with <type> or <type*>
 #                 }
 #                 if (token.compare("<type*>")==0){
                 if token == '<type*>':
@@ -2585,13 +2690,13 @@ class ResourceMT:
 #             case 1:{
             if index == 1:
 #                 type_prefix = token;
-                type_prefix = token
+                type_prefix = token  # wsdbm:Retailer
 #                 break;
 #             }
 #             case 2:{
             if index == 2:
 #                 scaling_coefficient = boost::lexical_cast<unsigned int>(token);
-                scaling_coefficient = int(token)
+                scaling_coefficient: int = int(token)  # 12
 #                 break;
 #             }
 #         }
@@ -2608,7 +2713,7 @@ class ResourceMT:
 #         cerr<<"[resource_m_t::parse()]\tExpecting 2 arguments..."<<"\n";
             print('[resource_m_t::parse()]\tExpecting 2 arguments...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error  # invalid line
 #     }
 
 # }
@@ -2619,8 +2724,10 @@ class ResourceMT:
 # class namespace_map {
 class NamespaceMap:
     """
+    Holds the info on prefixes in the form of dict of alias: prefix
 
     Attributes:
+        _index (dict[str, str]):
 
     """
 #     public:
@@ -2646,7 +2753,7 @@ class NamespaceMap:
         """
 #      private:
 #         map<string, string> _index; // @suppress("Invalid template argument")
-        self._index = {}
+        self._index: dict[str, str] = {}  # dict of alias -> prefix
 # }
         pass  # end of __init__
 
@@ -2655,15 +2762,19 @@ class NamespaceMap:
 # }
 
 # void namespace_map::insert (const namespace_m_t & namespace_declaration){
-    def insert(self, namespace_declaration=None, alias=None, prefix=None):
+    def insert(self, namespace_declaration: NamespaceMT = None, alias: str = None, prefix: str = None):
         """
+        Insert alias->prefix dict element into _index dict.
 
         Args:
+            namespace_declaration (NamespaceMT): Alias and prefix info in NamespaceMT instance
+            alias (str): dc
+            prefix (str): http://...
 
         Returns:
 
         """
-        if namespace_declaration is not None:
+        if namespace_declaration is not None:  # get info from NamespaceMT instance
     #     if (_index.find(namespace_declaration._alias)==_index.end()){
             try:
                 xxx = self._index[namespace_declaration._alias]
@@ -2675,10 +2786,10 @@ class NamespaceMap:
                 self._index[namespace_declaration._alias] = namespace_declaration._prefix
     #     }
     # }
-        pass  # end of insert
+        pass  # end of insert (const namespace_m_t & namespace_declaration)
 
 # void namespace_map::insert (const string & alias, const string & prefix){
-        if alias is not None and prefix is not None:
+        if alias is not None and prefix is not None:  # info is given by alias and prefix
 #     if (_index.find(alias)==_index.end()){
             try:
                 xxx = self._index[alias]
@@ -2693,10 +2804,12 @@ class NamespaceMap:
         pass  # end of namespace_map::insert (const string & alias, const string & prefix)
 
 # string namespace_map::lookup (const string & alias) const{
-    def lookup(self, alias):
+    def lookup(self, alias: str):
         """
+        Get the prefix of the alias.
 
         Args:
+            alias (str):
 
         Returns:
 
@@ -2712,30 +2825,35 @@ class NamespaceMap:
 #         cerr<<"[namespace_map::lookup()] Error: alias does not exist..."<<"\n";
             print('[namespace_map::lookup()] Error: alias does not exist...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error
 #     }
 # }
         pass  # end of lookup
 
 # string namespace_map::replace (const string & content) const{
-    def replace(self, content):
+    def replace(self, content: str) -> str:
         """
+        Convert the alias in a term (subject, etc.) into the corresponding prefix.
 
         Args:
+            content (str):
 
         Returns:
+            str:
 
         """
 #     unsigned int pos = content.find_first_of(':');
+        if content is None:
+            pass  # error
         pos: int = content.find(':')
 #     if (pos!=string::npos){
         if pos >= 0:
 #         string alias = content.substr(0, pos);
-            alias = content[:pos]
+            alias: str = content[:pos]  # alias
 #         string suffix = content.substr(pos+1);
-            suffix = content[pos+1:]
+            suffix: str = content[pos+1:]  # suffix
 #         string result = lookup(alias);
-            result = self.lookup(alias)
+            result: str = self.lookup(alias)  # prefix
 #         result.append(suffix);
             result += suffix
 #         return result;
@@ -2747,6 +2865,32 @@ class NamespaceMap:
 #     }
 # }
         pass  # end of replace
+
+    # void namespace_map::to_str (vector<string> & lines) const{
+    def to_str(self, lines: list[str]):
+        """
+        Not used.
+
+        Args:
+            lines (list[str]):
+
+        Returns:
+
+        """
+        #     for (map<string, string>::const_iterator itr=_index.begin(); itr!=_index.end(); itr++){
+        for itr_key, itr_value in self._index.items():
+            #         string line = "";
+            #         line.append(itr->first);
+            #         line.append(" ");
+            #         line.append(itr->second);
+            line = f'{itr_key} {itr_value}'
+            #         lines.push_back(line);
+            lines.append(line)
+        #     }
+        pass  # end of for
+
+    # }
+    pass  # end of to_str
     pass  # end of NamespaceMap
 
 
@@ -2778,6 +2922,9 @@ class AssociationMT:
         """
 
         Args:
+            subject_type (str):
+            predicate (str):
+            object_type (str):
 
         Returns:
 
@@ -2810,6 +2957,22 @@ class AssociationMT:
 # association_m_t::association_m_t (string subject_type, string predicate, string object_type){
     def __init__(self, subject_type, predicate, object_type, left_cardinality=None, right_cardinality=None, left_cover=None,
                  right_distribution=None, subject_type_restriction=None, object_type_restriction=None):
+        """
+
+        Args:
+            subject_type:
+            predicate:
+            object_type:
+            left_cardinality:
+            right_cardinality:
+            left_cover:
+            right_distribution:
+            subject_type_restriction:
+            object_type_restriction:
+
+        Returns:
+
+        """
 #     bool                            _post_process;
         self._post_process = False
 #     string                          _subject_type;
@@ -2897,15 +3060,7 @@ class AssociationMT:
             self._object_type_restriction = str(object_type_restriction)
 #         }
 # }
-        pass  # end of
-
-        """
-    
-        Args:
-    
-        Returns:
-    
-        """
+        pass  # end of __init__
 
     # association_m_t::~association_m_t (){
 #     delete _subject_type_restriction;
@@ -2913,10 +3068,14 @@ class AssociationMT:
 # }
 
 # void association_m_t::generate (const namespace_map & n_map, type_map & t_map, const map<string, unsigned int> & id_cursor_map){
-    def generate(self, n_map, t_map: TypeMap, id_cursor_map):
+    def generate(self, n_map, t_map: TypeMap, id_cursor_map: dict[str, int]):
         """
+        Generate AssociationMT instance.
 
         Args:
+            n_map (NamespaceMap):
+            t_map (TypeMap):
+            id_cursor_map (dict[str, int]):
 
         Returns:
 
@@ -2928,7 +3087,7 @@ class AssociationMT:
 #         cerr<<"[association_m_t::parse()] Error: association cannot be defined over undefined resource '"<<_subject_type<<"'..."<<"\n";
             print(f'[association_m_t::parse()] Error: association cannot be defined over undefined resource "{self._subject_type}"...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error
 #     }
 #     if (id_cursor_map.find(_object_type)==id_cursor_map.end()){
         try:
@@ -2937,7 +3096,7 @@ class AssociationMT:
 #         cerr<<"[association_m_t::parse()] Error: association cannot be defined over undefined resource '"<<_object_type<<"'..."<<"\n";
             print(f'[association_m_t::parse()] Error: association cannot be defined over undefined resource "{self._object_type}"...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error
 #     }
 
 #     model::clear_zipfian_cache();
@@ -2971,17 +3130,17 @@ class AssociationMT:
                             right_size = self._right_cardinality
 #                 }
 #                 for (unsigned int j=0; j<right_size; j++){
-                    for j in range(right_size):
+                    for j in range(right_size):  # right_size <= _right_cardinality
 #                     unsigned int loop_counter = 0;
-                        loop_counter = 0
+                        loop_counter: int = 0
 #                     unsigned int right_id = 0;
-                        right_id = 0
+                        right_id: int = 0
 #                     do {
                         while True:
 #                         double r_value = model::generate_random(_right_distribution, right_instance_count);
-                            r_value = Model.generate_random(self._right_distribution, right_instance_count)
+                            r_value: float = Model.generate_random(self._right_distribution, right_instance_count)
 #                         right_id = round(r_value * right_instance_count);
-                            right_id = round(r_value * right_instance_count)
+                            right_id: int = round(r_value * right_instance_count)
 #                         right_id = (right_id>=right_instance_count) ? (right_instance_count-1) : right_id;
                             if right_id >= right_instance_count:
                                 right_id = right_instance_count - 1
@@ -3000,21 +3159,21 @@ class AssociationMT:
                                 mapped_instances.add(right_id)
 #                         }
 #                         string subject(""), predicate (""), object(""), triple ("");
-                            subject = ''
-                            predicate = ''
-                            object0 = ''
-                            triple = ''
+                            subject: str = ''
+                            predicate: str = ''
+                            object_: str = ''
+                            triple: str = ''
 
 #                         // FIXME:: You need to add replace-command...
 #                         subject.append(n_map.replace(_subject_type));
-                            subject += n_map.replace(self._subject_type)
+                            subject += n_map.replace(self._subject_type)  # replace the alias with its prefix
 #                         subject.append(boost::lexical_cast<string>(left_id));
                             subject += str(left_id)
 
 #                         object.append(n_map.replace(_object_type));
-                            object0 += n_map.replace(self._object_type)
+                            object_ += n_map.replace(self._object_type)
 #                         object.append(boost::lexical_cast<string>(right_id));
-                            object0 += str(right_id)
+                            object_ += str(right_id)
 
 #                         predicate.append(n_map.replace(_predicate));
                             predicate += n_map.replace(self._predicate)
@@ -3040,33 +3199,33 @@ class AssociationMT:
 #                         object_str.append("<");
                             object_str += '<'
 #                         object_str.append(object);
-                            object_str += object0
+                            object_str += object_
 #                         object_str.append(">");
                             object_str += '>'
 
 #                         //triple_lines.push_back(triple_st(subject_str, predicate_str, object_str));
 #                         triple_st line (subject_str, predicate_str, object_str);
-                            line = TripleST(subject=subject_str, predicate=predicate_str, object0=object_str)
+                            line: TripleST = TripleST(subject=subject_str, predicate=predicate_str, object_=object_str)  # create TripleST instance
 #                         cout<<line<<" .\n";
-                            print(line, ' .')
+                            print(f'{line._subject} {line._predicate} {line._object} .')
 
 #                         // Save type assertions...
 #                         if (predicate.compare("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")==0){
                             if predicate == 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type':
 #                             t_map.insert(subject, object);
-                                t_map.insert(subject, object0)
+                                t_map.insert(subject, object_)  # register in type map
 #                         }
 #                     } else {
-                        else:
+                        else:  # loop_counter == MAX_LOOP_COUNTER
 #                         //cout<<"[association_m_t::generate] Warning:: failed to greedily satisfy cardinality constraints..."<<"\n";
 #                         //cout<<"[association_m_t::generate] Ignoring association "
 #                             //<<_subject_type<<left_id<<"-->"
 #                             //<<_object_type<<right_id<<" after"<<MAX_LOOP_COUNTER<<" trials..."<<"\n";
                             pass
-#                     }
-#                 }
-#             }
-#         }
+#                     }  // end of if
+#                 }  // end of for (unsigned int j=0; j<right_size; j++){
+#             }  // end of if (pr<=_left_cover){
+#         }  // for (unsigned int left_id=0; left_id<left_instance_count; left_id++){
 
 #         boost::posix_time::ptime t2 (bpt::microsec_clock::universal_time());
 #         //cerr    << "[association-generation]" << " " << (t2-t1).total_microseconds() << " "
@@ -3075,13 +3234,16 @@ class AssociationMT:
 #         //        << "\n";
 #     }
 # }
-        pass  # end of
+        pass  # end of generate
 
 # void association_m_t::process_type_restrictions (const namespace_map & n_map, const type_map & t_map, const map<string, unsigned int> & id_cursor_map){
     def process_type_restrictions(self, n_map, t_map, id_cursor_map):
         """
 
         Args:
+            n_map:
+            t_map:
+            id_cursor_map:
 
         Returns:
 
@@ -3094,7 +3256,7 @@ class AssociationMT:
 #         cerr<<"[association_m_t::parse()] Error: association cannot be defined over undefined resource '"<<_subject_type<<"'..."<<"\n";
             print(f'[association_m_t::parse()] Error: association cannot be defined over undefined resource "{self._subject_type}"...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error
 #     }
 #     if (id_cursor_map.find(_object_type)==id_cursor_map.end()){
         try:
@@ -3103,7 +3265,7 @@ class AssociationMT:
 #         cerr<<"[association_m_t::parse()] Error: association cannot be defined over undefined resource '"<<_object_type<<"'..."<<"\n";
             print(f'[association_m_t::parse()] Error: association cannot be defined over undefined resource "{self._object_type}"...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error
 #     }
 
 #     if (_post_process){
@@ -3135,7 +3297,7 @@ class AssociationMT:
 #         if (restricted_right_instances!=NULL){
             if restricted_right_instances:
 #             unsigned int right_instance_count = restricted_right_instances->size();
-                right_instance_coiunt = len(restricted_right_instances)
+                right_instance_count = len(restricted_right_instances)
 #             set<string> mapped_instances;
                 mapped_instances = set()
 #             for (unsigned int left_id=0; left_id<left_instance_count; left_id++){
@@ -3166,7 +3328,7 @@ class AssociationMT:
                             for j in range(right_size):
 #                             string predicate="", object="", triple="";
                                 predicate = ''
-                                object0 = ''
+                                object_ = ''
                                 triple = ''
 #                             unsigned int loop_counter = 0;
                                 loop_counter = 0
@@ -3180,11 +3342,11 @@ class AssociationMT:
                                     if right_index >= right_instance_count:
                                         right_index = right_instance_count - 1
 #                                 object = (*restricted_right_instances)[right_index];
-                                    object0 = restricted_right_instances[right_index]
+                                    object_ = restricted_right_instances[right_index]
 #                                 loop_counter++;
                                     loop_counter += 1
 #                             } while (mapped_instances.find(object)!=mapped_instances.end() && loop_counter<MAX_LOOP_COUNTER);
-                                    if object0 in mapped_instances:
+                                    if object_ in mapped_instances:
                                         break
                                     if loop_counter >= MAX_LOOP_COUNTER:
                                         break
@@ -3193,7 +3355,7 @@ class AssociationMT:
 #                                 if (_left_cardinality==1){
                                     if self._left_cardinality == 1:
 #                                     mapped_instances.insert(object);
-                                        mapped_instances.add(object0)
+                                        mapped_instances.add(object_)
 #                                 }
 
 #                                 predicate.append(n_map.replace(_predicate));
@@ -3218,13 +3380,13 @@ class AssociationMT:
 #                                 object_str.append("<");
                                     object_str += '<'
 #                                 object_str.append(object);
-                                    object_str += object0
+                                    object_str += object_
 #                                 object_str.append(">");
                                     object_str += '>'
 
 #                                 //triple_lines.push_back(triple_st(subject_str, predicate_str, object_str));
 #                                 triple_st line (subject_str, predicate_str, object_str);
-                                    line = TripleST(subject=subject_str, predicate=predicate_str, object0=object_str)
+                                    line = TripleST(subject=subject_str, predicate=predicate_str, object_=object_str)
 #                                 cout<<line<<" .\n";
                                     print(line, ' .')
 #                             }
@@ -3236,43 +3398,46 @@ class AssociationMT:
 #         }
 #     }
 # }
-        pass  # end of
+        pass  # end of process_type_restrictions
 
     @staticmethod
 # association_m_t * association_m_t::parse (const map<string, unsigned int> & id_cursor_map, const string & line){
-    def parse(line):
+    def parse(line: str):
         """
+        Parse a line for #association.
 
         Args:
+            line (str): subject_typ, predicate, object_type, left_cardinality, right_cardinality :
+            e.g., #association	wsdbm:SubGenre	rdf:type		wsdbm:Genre		2 1		1.0	UNIFORM
 
         Returns:
 
         """
 #     string subject_type ("");
-        subject_type = ''
+        subject_type: str = ''
 #     string predicate ("");
-        predicate = ''
+        predicate: str = ''
 #     string object_type ("");
-        object_type = ''
+        object_type: str = ''
 #     unsigned left_cardinality = 1;
-        left_cardinality = 1
+        left_cardinality: int = 1
 #     unsigned right_cardinality = 1;
-        right_cardinality = 1
+        right_cardinality: int = 1
 #     DISTRIBUTION_TYPES::enum_t right_cardinality_distribution = DISTRIBUTION_TYPES::UNDEFINED;
         right_cardinality_distribution = DistributionTypes.UNDEFINED
 #     float left_cover = 1.0;
-        left_cover = 1.0
+        left_cover: float = 1.0
 #     DISTRIBUTION_TYPES::enum_t right_distribution = DISTRIBUTION_TYPES::UNIFORM;
-        right_distribution = DistributionTypes.UNIFORM
+        right_distribution: DistributionTypes = DistributionTypes.UNIFORM
 #     string * subject_type_restriction = NULL;
         subject_type_restriction = None
 #     string * object_type_restriction = NULL;
         object_type_restriction = None
 
 #     stringstream parser(line);
-        parser = parse_line(line)
+        parser: list[str] = parse_line(line)  # split the line into tokens
 #     int index = 0;
-        index = 0
+        index: int = 0
 #     string token;
 #     while (parser>>token){
         for token in parser:
@@ -3284,48 +3449,49 @@ class AssociationMT:
 #                     cerr<<"[association_m_t::parse()]\tExpecting #association..."<<"\n";
                     print('[association_m_t::parse()]\tExpecting #association...')
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error  # must start with '#association'
 #                 }
 #                 break;
 #             }
 #             case 1: {
             elif index == 1:
 #                 subject_type = token;
-                subject_type = token
+                subject_type = token  # wsdbm:SubGenre
 #                 break;
 #             }
 #             case 2: {
             elif index == 2:
 #                 predicate = token;
-                predicate = token
+                predicate = token  # rdf:type
 #                 break;
 #             }
 #             case 3: {
             elif index == 3:
 #                 object_type = token;
-                object_type = token
+                object_type = token  # wsdbm:Genre
 #                 break;
 #             }
 #             case 4: {
             elif index == 4:
 #                 left_cardinality = boost::lexical_cast<unsigned int>(token);
-                left_cardinality = int(token)
+                left_cardinality = int(token)  # 		2 1		1.0	UNIFORM
 #                 break;
 #             }
 #             case 5: {
             elif index == 5:
 #                 if (token.find("[uniform]")!=string::npos || token.find("[UNIFORM]")!=string::npos){
+                # #association	wsdbm:SubGenre	og:tag			wsdbm:Topic		2 6[uniform]	1.0	UNIFORM
                 if token.find('[uniform]') >= 0 or token.find('[UNIFORM]') >= 0:
 #                     right_cardinality_distribution = DISTRIBUTION_TYPES::UNIFORM;
                     right_cardinality_distribution = DistributionTypes.UNIFORM
 #                     token = token.substr(0, token.find_first_of('['));
-                    token = token[:token.find('[')]
+                    token = token[:token.find('[')]  # 6
 #                 } else if (token.find("[normal]")!=string::npos || token.find("[NORMAL]")!=string::npos){
                 elif token.find('[normal]') >= 0 or token.find('[NORMAL]') >= 0:
     #                     right_cardinality_distribution = DISTRIBUTION_TYPES::NORMAL;
                     right_cardinality_distribution = DistributionTypes.NORMAL
 #                     token = token.substr(0, token.find_first_of('['));
-                    token = token[:token.find('[')]
+                    token = token[:token.find('[')]  # 6
 #                 }
 #                 right_cardinality = boost::lexical_cast<unsigned int>(token);
                 right_cardinality = int(token)
@@ -3334,21 +3500,21 @@ class AssociationMT:
 #             case 6: {
             elif index == 6:
 #                 left_cover = boost::lexical_cast<float>(token);
-                left_cover = float(token)
+                left_cover = float(token)  # 1.0
 #                 break;
 #             }
 #             case 7: {
             elif index == 7:
 #                 if (token.compare("uniform")==0 || token.compare("UNIFORM")==0){
-                if token.find('[uniform]') >= 0 or token.find('[UNIFORM]') >= 0:
+                if token.find('uniform') >= 0 or token.find('UNIFORM') >= 0:
 #                     right_distribution = DISTRIBUTION_TYPES::UNIFORM;
                     right_distribution = DistributionTypes.UNIFORM
 #                 } else if (token.compare("normal")==0 || token.compare("NORMAL")==0){
-                elif token.find('[normal]') >= 0 or token.find('[NORMAL]') >= 0:
+                elif token.find('normal') >= 0 or token.find('NORMAL') >= 0:
 #                     right_distribution = DISTRIBUTION_TYPES::NORMAL;
                     right_distribution = DistributionTypes.NORMAL
 #                 } else if (token.compare("zipfian")==0 || token.compare("ZIPFIAN")==0){
-                elif token.find('[normal]') >= 0 or token.find('[NORMAL]') >= 0:
+                elif token.find('zipfian') >= 0 or token.find('ZIPFIAN') >= 0:
 #                     right_distribution = DISTRIBUTION_TYPES::ZIPFIAN;
                     right_distribution = DistributionTypes.ZIPFIAN
 #                 }
@@ -3359,7 +3525,7 @@ class AssociationMT:
 #                 if (!boost::starts_with(token, "@")){
                 if not token.startswith('@'):
 #                     cerr<<"[association_m_t::parse()]\tExpecting '@' qualifier before type restriction..."<<"\n";
-                    print('[association_m_t::parse()]\tExpecting '@' qualifier before type restriction...')
+                    print("[association_m_t::parse()]\tExpecting '@' qualifier before type restriction...")
 #                     exit(0);
                     sys.exit(0)
 #                 }
@@ -3371,11 +3537,11 @@ class AssociationMT:
 #                 break;
 #             }
 #             case 9: {
-            elif index == 9:
+            elif index == 9:  # #association	wsdbm:User	wsdbm:follows		wsdbm:User		2 5[normal]	0.2	ZIPFIAN @null		@wsdbm:Role2
 #                 if (!boost::starts_with(token, "@")){
                 if not token.startswith('@'):
 #                     cerr<<"[association_m_t::parse()]\tExpecting '@' qualifier before type restriction..."<<"\n";
-                    print('[association_m_t::parse()]\tExpecting '@' qualifier before type restriction...')
+                    print("[association_m_t::parse()]\tExpecting '@' qualifier before type restriction...")
 #                     exit(0);
                     sys.exit(0)
 #                 }
@@ -3417,16 +3583,16 @@ class AssociationMT:
 #         cerr<<"[association_m_t::parse()]\tExpecting 3, 5, 6, 7 or 9 arguments..."<<"\n";
             print('[association_m_t::parse()]\tExpecting 3, 5, 6, 7 or 9 arguments...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error  # invalid input line
 #     }
 #     result->_right_cardinality_distribution = right_cardinality_distribution;
         result.right_cardinality_distribution = right_cardinality_distribution
 #     delete subject_type_restriction;
 #     delete object_type_restriction;
 #     return result;
-        return result
+        return result  # instance of AssociationMT class
 # }
-        pass # end of parse
+        pass  # end of parse
     pass  # end of AssociationMT
 
 
@@ -3457,10 +3623,13 @@ class MappingMT:
 #     static mapping_m_t * parse (const string & line);
 # };
 # void mapping_m_t::init (const string & var_name, LITERAL_TYPES::enum_t literal_type){
-    def init(self, var_name='', literal_type=None, resource_type=None):
+    def init(self, var_name: str = '', literal_type=None, resource_type=None):
         """
 
         Args:
+            var_name (str):
+            literal_type:
+            resource_type:
 
         Returns:
 
@@ -3500,9 +3669,9 @@ class MappingMT:
     #         case LITERAL_TYPES::DATE:{
             elif self._literal_type == LiteralTypes.DATE:
     #             boost::posix_time::ptime cur_time (boost::posix_time::second_clock::local_time());
-                cur_time = datetime.time()
+                cur_time = datetime.time
     #             boost::gregorian::date cur_date = cur_time.date();
-                cur_date = datetime.date()
+                cur_date = datetime.date
     #             _range_min = string("1970-01-01");
                 self._range_min = '1970-01-01'
     #             _range_max = boost::gregorian::to_iso_extended_string(cur_date);
@@ -3538,10 +3707,18 @@ class MappingMT:
 # }
 
 # mapping_m_t::mapping_m_t (const string & var_name, LITERAL_TYPES::enum_t literal_type){
-    def __init__(self, var_name='', literal_type=None, distribution_type=None, range_min=None, range_max=None, resource_type=None, type_restriction=None, rhs=None):
+    def __init__(self, var_name: str = '', literal_type=None, distribution_type=None, range_min: str = None, range_max: str = None, resource_type=None, type_restriction: str = None, rhs=None):
         """
 
         Args:
+            var_name:
+            literal_type:
+            distribution_type:
+            range_min:
+            range_max:
+            resource_type:
+            type_restriction:
+            rhs:
 
         Returns:
 
@@ -3555,15 +3732,15 @@ class MappingMT:
         #     string                      _range_min;
         #     string                      _range_max;
         #     string                      _dynamic_model_name;
-        self._var_name = ''
-        self._is_literal_type = False
+        self._var_name: str = ''
+        self._is_literal_type: bool = False
         self._literal_type = None
-        self._resource_type = ''
-        self._type_restriction = ''
+        self._resource_type: str = ''
+        self._type_restriction: str = ''
         self._distribution_type = None
-        self._range_min = ''
-        self._range_max = ''
-        self._dynamic_model_name = ''
+        self._range_min: str = ''
+        self._range_max: str = ''
+        self._dynamic_model_name: str = ''
 
         if literal_type is not None:
 #     init (var_name, literal_type);
@@ -3640,15 +3817,19 @@ class MappingMT:
 # string mapping_m_t::generate (const model & mdl, const query_template_m_t & q_template){
     def generate(self, mdl, q_template, instance_count=None):
         """
+        Generate MappingMT ?
 
         Args:
+            mdl:
+            q_template:
+            instance_count:
 
         Returns:
 
         """
         if instance_count is None:
     #     unsigned int count = 0;
-            count = 0
+            count: int = 0
     #     return generate(mdl, q_template, count);
             return self.generate(mdl, q_template, instance_count=count)
     # }
@@ -3673,7 +3854,7 @@ class MappingMT:
                     instance_count = mdl._id_cursor_map[self._resource_type]
 
 #             unsigned int id = 0;
-                    id0 = 0
+                    id_: int = 0
 #             if (_distribution_type==DISTRIBUTION_TYPES::DYNAMIC){
                     if self._distribution_type == DistributionTypes.DYNAMIC:
 #                 map<string, pair<volatility_gen*, float> >::const_iterator itr = q_template._volatility_table.find(_dynamic_model_name);
@@ -3684,7 +3865,7 @@ class MappingMT:
 #                     cerr << "[mapping_m_t::generate()]\tDynamic model " << _dynamic_model_name << " does not exist..." << "\n";
                             print(f'[mapping_m_t::generate()]\tDynamic model {self._dynamic_model_name} does not exist...')
 #                     exit(0);
-                            sys.exit(0)
+                            sys.exit(0)  # error
 #                 }
 #                 volatility_gen * v_gen = itr->second.first;
                         v_gen = itr.first  # ###################################################
@@ -3712,24 +3893,24 @@ class MappingMT:
                             v_gen.advance()
 #                 }
 #                 id = v_gen->next_rand_index();
-                        id0 = v_gen.next_rand_index()
+                        id_ = v_gen.next_rand_index()
 #             } else {
                     else:
 #                 double r_value = model::generate_random(_distribution_type, instance_count);
                         r_value = Model.generate_random(self._distribution_type, instance_count)
 #                 id = round(r_value * instance_count);
-                        id0 = round(r_value * instance_count)
+                        id_ = round(r_value * instance_count)
 #             }
 
 #             id = (id>=instance_count) ? (instance_count-1) : id;
-                    if id0 >= instance_count:
-                        id0 = instance_count - 1
+                    if id_ >= instance_count:
+                        id_ = instance_count - 1
 #             result.append("<");
                     result += '<'
 #             result.append(mdl._namespace_map.replace(_resource_type));
                     result += mdl._namespace_map.replace(self._resource_type)
 #             result.append(boost::lexical_cast<string>(id));
-                    result += str(id0)
+                    result += str(id_)
 #             result.append(">");
                     result += '>'
 #             return result;
@@ -3744,7 +3925,7 @@ class MappingMT:
                     instance_count = len(restricted_instances)
 
 #             unsigned int index = 0;
-                    index = 0
+                    index: int = 0
 
 #             if (_distribution_type==DISTRIBUTION_TYPES::DYNAMIC){
                     if self._distribution_type == DistributionTypes.DYNAMIC:
@@ -3756,7 +3937,7 @@ class MappingMT:
 #                     cerr << "[mapping_m_t::generate()]\tDynamic model " << _dynamic_model_name << " does not exist..." << "\n";
                             print(f'[mapping_m_t::generate()]\tDynamic model {self._dynamic_model_name} does not exist...')
 #                     exit(0);
-                            sys.exit(0)
+                            sys.exit(0)  # error
 #                 }
 #                 volatility_gen * v_gen = itr->second.first;
                         v_gen = itr.first  # ############################################
@@ -3807,47 +3988,49 @@ class MappingMT:
 #         }
 #     }
 # }
-        pass  # end of
+        pass  # end of generate
 
     @staticmethod
 # mapping_m_t * mapping_m_t::parse (const string & line){
-    def parse(line):
+    def parse(line: str):
         """
+        Parse the #mapping line.
 
         Args:
+            line (str): a string to be parsed.
 
         Returns:
 
         """
 #     //cout<<"Parsing "<<line<<"\n";
 #     string var_name;
-        var_name = ''
+        var_name: str = ''
 #     bool is_literal_type = true;
-        is_literal_type = True
+        is_literal_type: bool = True
 #     LITERAL_TYPES::enum_t literal_type = LITERAL_TYPES::UNDEFINED;
-        literal_type = LiteralTypes.UNDEFINED
+        literal_type: LiteralTypes = LiteralTypes.UNDEFINED
 #     string resource_type = "";
-        resource_type = ''
+        resource_type: str = ''
 #     bool type_restriction_exists = false;
-        type_restriction_exists = False
+        type_restriction_exists: bool = False
 #     string type_restriction = "";
-        type_restriction = ''
+        type_restriction: str = ''
 #     DISTRIBUTION_TYPES::enum_t distribution_type = DISTRIBUTION_TYPES::UNDEFINED;
-        distribution_type = DistributionTypes.UNDEFINED
+        distribution_type: DistributionTypes = DistributionTypes.UNDEFINED
 #     string range_min = "";
-        range_min = ''
+        range_min: str = ''
 #     string range_max = "";
-        range_max = ''
+        range_max: str = ''
 #     string distribution_name = "";
-        distribution_name = ''
+        distribution_name: str = ''
 
 #     stringstream parser(line);
-        parser = parse_line(line)
+        parser: list[str] = parse_line(line)  # split the line into tokens
 #     int index = 0;
-        index = 0
+        index: int = 0
 #     string token;
 #     while (parser>>token){
-        for token in parser:
+        for token in parser:  # #mapping v0 wsdbm:User uniform
 #         switch (index){
 #             case 0:{
             if index == 0:
@@ -3856,14 +4039,14 @@ class MappingMT:
 #                     cerr<<"[mapping_m_t::parse()]\tExpecting #mapping..."<<"\n";
                     print('[mapping_m_t::parse()]\tExpecting #mapping...')
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error  # must starts with '#mapping'
 #                 }
 #                 break;
 #             }
 #             case 1:{
             elif index == 1:
     #                 var_name = token;
-                var_name = token
+                var_name = token  # v0
 #                 break;
 #             }
 #             case 2:{
@@ -3885,7 +4068,7 @@ class MappingMT:
 #                     literal_type = LITERAL_TYPES::STRING;
                     literal_type = LiteralTypes.STRING
 #                 } else {
-                else:
+                else:  # wsdbm:User
 #                     is_literal_type = false;
                     is_literal_type = False
 #                     int pos = token.find_first_of('@');
@@ -3893,7 +4076,7 @@ class MappingMT:
 #                     if (pos==string::npos){
                     if pos < 0:
 #                         resource_type = token;
-                        resource_type = token
+                        resource_type = token  # wsdbm:User
 #                     } else {
                     else:
 #                         resource_type = token.substr(0, pos);
@@ -3907,7 +4090,7 @@ class MappingMT:
 #                 break;
 #             }
 #             case 3:{
-            elif index == 3:
+            elif index == 3:  # uniform
     #                 if (token.compare("uniform")==0 || token.compare("UNIFORM")==0){
                 if token.find('uniform') >= 0 or token.find('UNIFORM') >= 0:
 #                     distribution_type = DISTRIBUTION_TYPES::UNIFORM;
@@ -3961,7 +4144,7 @@ class MappingMT:
                 return MappingMT(var_name=var_name, literal_type=literal_type, distribution_type=distribution_type, range_min=range_min, range_max=range_max)
 #         }
 #     } else {
-        else:
+        else:  # not is_literal_type
 #         if (type_restriction_exists){
             if type_restriction_exists:
 #             if (index==3){
@@ -3985,7 +4168,7 @@ class MappingMT:
 #                 }
 #             }
 #         } else {
-            else:
+            else:  # not type_restriction_exists
 #             if (index==3){
                 if index == 3:
 #                 return new mapping_m_t(var_name, resource_type);
@@ -4001,7 +4184,7 @@ class MappingMT:
 #                     return result;
                         return result
 #                 } else {
-                    else:
+                    else:  # distribution_type != DistributionTypes.DYNAMIC
 #                     return new mapping_m_t(var_name, resource_type, distribution_type);
                         return MappingMT(var_name=var_name, resource_type=resource_type, distribution_type=distribution_type)
 #                 }
@@ -4011,7 +4194,7 @@ class MappingMT:
 #     cerr<<"[mapping_m_t::parse()]\tIncompatible arguments..."<<"\n";
         print('[mapping_m_t::parse()]\tIncompatible arguments...')
 #     exit(0);
-        sys.exit(0)
+        sys.exit(0)  # error  # invalid line
 # }
         pass  # end of parse
     pass  # end of MappingMT
@@ -4037,18 +4220,23 @@ class OperationMT:
         """
 
         Args:
+            target_variable:
+            source_variable:
+            operation:
+            operand:
+            rhs:
 
         Returns:
 
         """
 #     string                      _target_variable;
-        self._target_variable = ''
+        self._target_variable: str = ''
 #     string                      _source_variable;
-        self._source_variable = ''
+        self._source_variable: str = ''
 #     OPERATION_TYPES::enum_t     _operation;
         self._operation = None
 #     int                         _operand;
-        self._operand = 0
+        self._operand: int = 0
 
         if rhs is None:
 #     _target_variable = target_variable;
@@ -4075,10 +4263,11 @@ class OperationMT:
         pass  # end of __init__
 
 # string operation_m_t::compute (const map<string, string> & value_mappings){
-    def compute(self, value_mappings):
+    def compute(self, value_mappings: dict[str, str]):
         """
 
         Args:
+            value_mappings (dict[str, str]):
 
         Returns:
 
@@ -4105,25 +4294,26 @@ class OperationMT:
 
     @staticmethod
 # operation_m_t * operation_m_t::parse (const string & line){
-    def parse(line):
+    def parse(line: str):
         """
 
         Args:
+            line (str)
 
         Returns:
 
         """
 #     string target_variable = "", source_variable = "";
-        target_variable = ''
-        source_variable = ''
+        target_variable: str = ''
+        source_variable: str = ''
 #     OPERATION_TYPES::enum_t operation = OPERATION_TYPES::UNDEFINED;
         operation = OperationTypes.UNDEFINED
 #     int operand = -1;
-        operand = -1
+        operand: int = -1
 #     stringstream parser(line);
-        parser = parse_line(line)
+        parser: list[str] = parse_line(line)
 #     int index = 0;
-        index = 0
+        index: int = 0
 #     string token;
 #     while (parser>>token){
         for token in parser:
@@ -4135,7 +4325,7 @@ class OperationMT:
 #                     cerr<<"[operation_m_t::parse()]\tExpecting #operation..."<<"\n";
                     print('[operation_m_t::parse()]\tExpecting #operation...')
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error
 #                 }
 #                 break;
 #             }
@@ -4187,7 +4377,7 @@ class OperationMT:
 #         cerr<<"[operation_m_t::parse()]\tIncompatible number of arguments..."<<"\n";
             print('[operation_m_t::parse()]\tIncompatible number of arguments...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error
 #     }
 # }
         pass  # end of parse
@@ -4215,8 +4405,11 @@ class QueryTemplateMT:
 # query_template_m_t::query_template_m_t(const model * mdl){
     def __init__(self, mdl=None, rhs=None):
         """
+        Create QueryTemplateMT instance.
 
         Args:
+            mdl (Model):
+            rhs:
 
         Returns:
 
@@ -4234,7 +4427,7 @@ class QueryTemplateMT:
 #     int                                         _instantiationCount;#     const model *                              _mdl;
         self._instantiationCount = 0
 
-        if rhs is None:
+        if rhs is None:  # read info from model instance
 #     _mdl = mdl;
             self._mdl = mdl
 #     _instantiationCount = 0;
@@ -4242,7 +4435,7 @@ class QueryTemplateMT:
 # }
 
 # query_template_m_t::query_template_m_t(const query_template_m_t & rhs){ // @suppress("Class members should be properly initialized")
-        if rhs is not None:
+        if rhs is not None:  # read info from rhs
 #     for (vector<mapping_m_t*>::const_iterator itr=rhs._variable_mapping_array.cbegin(); itr!=rhs._variable_mapping_array.cend(); itr++){
             for itr in rhs._variable_mapping_array:
 #         mapping_m_t * mapping = *itr;
@@ -4292,17 +4485,20 @@ class QueryTemplateMT:
 # }
 
 # void query_template_m_t::instantiate (unsigned int query_count, unsigned int recurrence, vector<string> & result_array){
-    def instantiate(self, query_count, recurrence):
+    def instantiate(self, query_count: int, recurrence: int):
         """
+        Generate sparql queries from a template.
 
         Args:
+            query_count (int): number of queries to be generated.
+            recurrence (int):
 
         Returns:
 
         """
-        result_array = []
+        result_array = []  # list for holding generated queries
 #     map<string, vector<string> > sample_map;
-        sample_map = {}
+        sample_map: dict[str, list[str]] = {}
 #     unsigned int sample_count = (int)((float)query_count/(float)recurrence)+1;
         sample_count = int(float(query_count)/float(recurrence)) + 1
 #     for (unsigned i=0; i<sample_count; i++){
@@ -4310,7 +4506,7 @@ class QueryTemplateMT:
 #         for (vector<mapping_m_t*>::const_iterator itr=_variable_mapping_array.cbegin(); itr!=_variable_mapping_array.cend(); itr++){
             for itr in self._variable_mapping_array:
 #             mapping_m_t * mapping = *itr;
-                mapping = itr
+                mapping = itr  # variable to be instantiated
 #             if (mapping->_distribution_type!=DISTRIBUTION_TYPES::DYNAMIC){
                 if mapping._distribution_type != DistributionTypes.DYNAMIC:
 #                 if (sample_map.find(mapping->_var_name)==sample_map.end()){
@@ -4329,9 +4525,9 @@ class QueryTemplateMT:
 #     for (unsigned i=0; i<query_count; i++){
         for i in range(query_count):
 #         string query = "";
-            query = ''
+            query: str = ''
 #         map<string, string> value_map;
-            value_map = {}
+            value_map: dict[str, str] = {}
 #         ///////////////////////////////////////////////////////////////////////////////////////////
 #         // Instead of populating value_map using mapping_m_t
 #         //  just sample values from sample_map...
@@ -4340,7 +4536,7 @@ class QueryTemplateMT:
 #         for (vector<mapping_m_t*>::const_iterator itr=_variable_mapping_array.cbegin(); itr!=_variable_mapping_array.cend(); itr++){
             for itr in self._variable_mapping_array:
 #             mapping_m_t * mapping = *itr;
-                mapping = itr
+                mapping: MappingMT = itr
 #             if (mapping->_distribution_type==DISTRIBUTION_TYPES::DYNAMIC){
                 if mapping._distribution_type == DistributionTypes.DYNAMIC:
 #                 value_map.insert(pair<string, string>(mapping->_var_name, mapping->generate(*_mdl, *this)));
@@ -4348,7 +4544,7 @@ class QueryTemplateMT:
 #             } else {
                 else:
 #                 vector<string> samples = sample_map[mapping->_var_name];
-                    samples = sample_map[mapping._var_name]
+                    samples: list[str] = sample_map[mapping._var_name]
 #                 value_map.insert(pair<string, string>(mapping->_var_name, samples[rand()%samples.size()]));
                     index = random.randint(0, len(samples)-1)
                     value_map[mapping._var_name] = samples[index]
@@ -4365,7 +4561,7 @@ class QueryTemplateMT:
 #         for (vector<operation_m_t*>::const_iterator itr=_operation_array.cbegin(); itr!=_operation_array.cend(); itr++){
             for itr in self._operation_array:
 #             operation_m_t * operation = *itr;
-                operation = itr
+                operation: OperationMT = itr
 #             string value = operation->compute(value_map);
                 value = operation.compute(value_map)
 #             value_map.insert(pair<string, string>(operation->_target_variable, value));
@@ -4374,12 +4570,12 @@ class QueryTemplateMT:
 #         for (vector<string>::const_iterator itr=_template_lines.cbegin(); itr!=_template_lines.cend(); itr++){
             for itr in self._template_lines:
 #             string line = *itr;
-                line = itr
+                line: str = itr
 #             float probability = 1.01;
-                probability = 1.01
+                probability: float = 1.01
 
 #             string line_cpy = line;
-                line_cpy = line
+                line_cpy: str = line
 #             boost::trim(line_cpy);
                 line_cpy.strip()
 #             if (line_cpy[0]=='['){
@@ -4393,7 +4589,7 @@ class QueryTemplateMT:
 #                 string probability_str = line.substr(begin_pos+1, end_pos-begin_pos-1);
                     probability_str = line[begin_pos+1: end_pos]
 #                 string line_suffix = line.substr(end_pos+1);
-                    line_suffix = line.substr[end_pos+1:]
+                    line_suffix = line[end_pos+1:]
 #                 probability = boost::lexical_cast<float>(probability_str);
                     probability = float(probability_str)
 #                 line = line_prefix;
@@ -4413,40 +4609,32 @@ class QueryTemplateMT:
 #             }
 
 #             string modified_line = "";
-                modified_line = ''
+                modified_line: str = ''
 
 #             // FIXME :: You need to implement a much better version of replace_all()...
 #             string token;
 #             int token_count = 0;
-                token_count = 0
+                token_count: int = 0
 #             stringstream tokenizer (line);
-                xxx = line.replace('\t', ' ')
-                xxx = xxx.replace('  ', ' ')
-                xxx = xxx.replace('  ', ' ')
-                tokenizer = xxx.split(' ')
+                tokenizer = parse_line(line)
 #             while (tokenizer>>token){
-                for token in tokenizer:
+                for token in tokenizer:  # first pass to count the number of tokens
 #                 token_count++;
                     token_count += 1
 #             }
 
 #             int counter = 0;
-                counter = 0
+                counter: int = 0
 #             stringstream tokenizer2 (line);
-                xxx = line.replace('\n', ' ')
-                xxx = xxx.replace('\t', ' ')
-                xxx = xxx.replace('  ', ' ')
-                xxx = xxx.replace('  ', ' ')
-                xxx.strip()
-                tokenizer2 = xxx.split(' ')
+                tokenizer2 = parse_line(line)
 #             while (tokenizer2>>token){
-                for token in tokenizer2:
+                for token in tokenizer2:  # second pass for actual processing
 #                 if (token.find(":")!=string::npos){
                     if token.find(':') >= 0:
 #                     modified_line.append("<");
                         modified_line += '<'
 #                     modified_line.append(_mdl->_namespace_map.replace(token));
-                        modified_line += self._mdl._namespace_map.replace(token)
+                        modified_line += self._mdl._namespace_map.replace(token)  # replace the alias with prefix
 #                     modified_line.append(">");
                         modified_line += '>'
 #                 } else {
@@ -4464,15 +4652,15 @@ class QueryTemplateMT:
 #             }
 
 #             while (modified_line.find('%', 0)!=string::npos){
-                while modified_line.find('%%') >= 0:
+                while modified_line.find('%') >= 0:  # replace the placeholder variable
 #                 int begin = modified_line.find('%', 0);
-                    begin = modified_line.find('%%', 0)
+                    begin = modified_line.find('%', 0)
 #                 int end = modified_line.find('%', begin+1);
-                    end = modified_line.find('%%', begin+1)
+                    end = modified_line.find('%', begin+1)
 #                 string var_name = modified_line.substr(begin+1, end-begin-1);
                     var_name = modified_line[begin+1: end]
 #                 modified_line = modified_line.replace(begin, end-begin+1, value_map[var_name]);
-                    modified_line = modified_line.replace(f'%%{var_name}%%', value_map[var_name])
+                    modified_line = modified_line.replace(f'%{var_name}%', value_map[var_name])
 #             }
 #             if (modified_line[modified_line.size()-1]=='.'){
                 if modified_line[-1] == '.':
@@ -4494,42 +4682,44 @@ class QueryTemplateMT:
         pass  # end of instantiate
 
 # void query_template_m_t::parse (const string filename){
-    def parse(self, filename):
+    def parse(self, filename: str):
         """
+        Read query template file.
 
         Args:
+            filename (str):
 
         Returns:
 
         """
 #     ifstream fis (filename);
         with (open(filename, 'r') as fis):
-            lines = fis.readlines()
+            lines: list[str] = fis.readlines()  # read all the lines at once
 #     string line;
 #     while (fis.good() && !fis.eof()){
 #         getline(fis, line);
             for line in lines:
 #         if (fis.good() && !fis.eof()){
 #             if (boost::starts_with(line, "#mapping")){
-                if line.startswith('#mapping'):
+                if line.startswith('#mapping'):  # e.g., #mapping v0 wsdbm:User uniform
 #                 mapping_m_t * mapping = mapping_m_t::parse(line);
-                    mapping = MappingMT.parse(line)
+                    mapping: MappingMT = MappingMT.parse(line)  # MappingMT instance
 #                 _variable_mapping_array.push_back(mapping);
-                    self._variable_mapping_array.append(mapping)
+                    self._variable_mapping_array.append(mapping)  # store in a list
 #             } else if (boost::starts_with(line, "#operation")){
                 elif line.startswith('#operation'):
 #                 operation_m_t * operation = operation_m_t::parse(line);
-                    operation = OperationMT.parse(line)
+                    operation: OperationMT = OperationMT.parse(line)
 #                 _operation_array.push_back(operation);
                     self._operation_array.append(operation)
 #             } else if (boost::starts_with(line, "#dynamic")){
                 elif line.startswith('#dynamic'):
 #                 string name = "";
-                    name = ''
+                    name:str = ''
 #                 float advance_pr = -1.0;
-                    advance_pr = -1.0
+                    advance_pr: float = -1.0
 #                 volatility_gen * v_gen = volatility_gen::parse(line, name, advance_pr);
-                    v_gen = VolatilityGen.parse(line, name, advance_pr)
+                    v_gen: VolatilityGen = VolatilityGen.parse(line, name, advance_pr)
 #                 if (_volatility_table.find(name)==_volatility_table.end()){
                     try:
                         xxx = self._volatility_table[name]
@@ -4543,7 +4733,7 @@ class QueryTemplateMT:
 #             } else {
                 else:
 #                 _template_lines.push_back(line);
-                    self._template_lines.append(line)
+                    self._template_lines.append(line)  # sparql query strings
 #             }
 #         }
 #     }
@@ -4552,46 +4742,47 @@ class QueryTemplateMT:
         pass  # end of parse
 
 # void query_template_m_t::parse_str (const string & content){
-    def parse_str(self, content):
+    def parse_str(self, content: str):
         """
 
         Args:
+            content (str):
 
         Returns:
 
         """
 #     stringstream sstream (content);
-        lines = content.split('\n')
+        lines: list[str] = content.split('\n')
 #     string line;
 #     while (getline(sstream, line, '\n')){
         for line in lines:
 #         if (boost::starts_with(line, "#mapping")){
             if line.startswith('#mapping'):
 #             mapping_m_t * mapping = mapping_m_t::parse(line);
-                mapping = MappingMT.parse(line)
+                mapping: MappingMT = MappingMT.parse(line)
 #             _variable_mapping_array.push_back(mapping);
                 self._variable_mapping_array.append(mapping)
 #         } else if (boost::starts_with(line, "#operation")){
             elif line.startswith('#operation'):
 #             operation_m_t * operation = operation_m_t::parse(line);
-                operation = OperationMT.parse(line)
+                operation: OperationMT = OperationMT.parse(line)
 #             _operation_array.push_back(operation);
                 self._operation_array.append(operation)
 #         } else if (boost::starts_with(line, "#dynamic")){
             elif line.startswith('#dynamic'):
 #                 string name = "";
-                name = ''
+                name: str = ''
 #                 float advance_pr = -1.0;
-                advance_pr = -1.0
+                advance_pr: float = -1.0
 #                 volatility_gen * v_gen = volatility_gen::parse(line, name, advance_pr);
-                v_gen = None
-                try:
-                    v_gen = VolatilityGen.parse(line, name, advance_pr)
-                    print('[query_template_m_t::parse]\tIgnoring duplicate #dynamic entry...')
+                v_gen: VolatilityGen = VolatilityGen.parse(line, name, advance_pr)
 #                 if (_volatility_table.find(name)==_volatility_table.end()){
+                try:
+                    xxx = self._volatility_table[name]  # check whether the entry exists
+                    print('[query_template_m_t::parse]\tIgnoring duplicate #dynamic entry...')  # duplicate occurs
                 except KeyError:
 #                     _volatility_table.insert(pair<string, pair<volatility_gen*, float> >(name, pair<volatility_gen*, float>(v_gen, advance_pr)));
-                    self._volatility_table[name] = (v_gen, advance_pr)
+                    self._volatility_table[name] = (v_gen, advance_pr)  # if the entry does not exist, add to the dict object
 #                 } else {
 #                     cerr << "[query_template_m_t::parse]\tIgnoring duplicate #dynamic entry..." << "\n";
 #                 }
@@ -4630,6 +4821,10 @@ class StatisticsMT:
         """
 
         Args:
+            mdl:
+            predicate:
+            subject_type:
+            object_type:
 
         Returns:
 
@@ -4671,6 +4866,13 @@ class StatisticsMT:
         """
 
         Args:
+            mdl:
+            predicate:
+            subject_type:
+            object_type:
+            subject_type_restriction:
+            object_type_restriction:
+            rhs:
 
         Returns:
 
@@ -4684,15 +4886,15 @@ class StatisticsMT:
 #     int *               _left_statistics;
 #     unsigned int        _right_count;
 #     int *               _right_statistics;
-        self._predicate = ''
-        self._subject_type = ''
-        self._object_type = ''
-        self._subject_type_restriction = ''
-        self._object_type_restriction = ''
-        self._left_count = 0
-        self._left_statistics = 0
-        self._right_count = 0
-        self._right_statistics = 0
+        self._predicate: str = ''
+        self._subject_type: str = ''
+        self._object_type: str = ''
+        self._subject_type_restriction: str = ''
+        self._object_type_restriction: str = ''
+        self._left_count: int = 0
+        self._left_statistics: int = 0
+        self._right_count: int = 0
+        self._right_statistics: int = 0
 
         if mdl is not None and predicate is not None and subject_type is not None and object_type is not None:
 #     init (mdl, predicate, subject_type, object_type);
@@ -4767,10 +4969,14 @@ class StatisticsMT:
 # }
 
 # void statistics_m_t::collect (const model * mdl, const string & subject, const string & predicate, const string & object){
-    def collect(self, mdl, subject, predicate, object0):
+    def collect(self, mdl, subject, predicate, object_):
         """
 
         Args:
+            mdl:
+            subject:
+            predicate:
+            object_:
 
         Returns:
 
@@ -4797,16 +5003,16 @@ class StatisticsMT:
 #         o_prefix.append(mdl->_namespace_map.replace(_object_type));
             o_prefix += mdl._namespace_map.replace(self._object_type)
 #         if (boost::starts_with(subject, s_prefix) && boost::starts_with(object, o_prefix)){
-            if subject.startswith(s_prefix) and object0.startswith(o_prefix):
+            if subject.startswith(s_prefix) and object_.startswith(o_prefix):
 #             // FIXME::Also check for type restrictions if they exist...
 #             string s_instance = subject.substr(1, subject.size()-2);
                 s_instance = subject[1:-2]
 #             string o_instance = object.substr(1, object.size()-2);
-                o_instance = object0[1:-2]
+                o_instance = object_[1:-2]
 #             unsigned int s_id = boost::lexical_cast<unsigned int>(subject.substr(s_prefix.size(), (subject.size() - s_prefix.size() - 1)));
                 s_id = int(subject[len(s_prefix), (len(subject) - len(s_prefix) - 1)])
 #             unsigned int o_id = boost::lexical_cast<unsigned int>(object.substr(o_prefix.size(), (object.size() - o_prefix.size() - 1)));
-                o_id = int(object0[len(o_prefix), (len(object0) - len(o_prefix) - 1)])
+                o_id = int(object_[len(o_prefix), (len(object_) - len(o_prefix) - 1)])
 #             if ((_subject_type_restriction==NULL || mdl->_type_map.instanceof(s_instance, mdl->_namespace_map.replace(*_subject_type_restriction))) &&
 #                 (_object_type_restriction==NULL || mdl->_type_map.instanceof(o_instance, mdl->_namespace_map.replace(*_object_type_restriction)))){
                 if (self._subject_type_restriction is None or mdl._type_map.instanceof(s_instance, mdl._namespace_map.replace(self._subject_type_restriction))) and \
@@ -4843,17 +5049,17 @@ class StatisticsMT:
 
         """
 #     float left_cover = 0.0;
-        left_cover = 0.0
+        left_cover: float = 0.0
 #     unsigned int left_actual_count = 0;
-        left_actual_count = 0
+        left_actual_count: int = 0
 #     unsigned int left_min = numeric_limits<unsigned int>::max();
-        left_min = 1000000
+        left_min: int = 1000000
 #     unsigned int left_max = numeric_limits<unsigned int>::min();
-        left_max = -1000000
+        left_max: int = -1000000
 #     float left_mean = 0.0;
-        left_mean = 0.0
+        left_mean: float  = 0.0
 #     vector<unsigned int> left_distribution;
-        left_distribution = []
+        left_distribution: list[int] = []
 
 #     for (unsigned int i=0; i<_left_count; i++){
         for i in range(self._left_count):
@@ -4890,17 +5096,17 @@ class StatisticsMT:
         left_distribution.sort()
 
 #     float right_cover = 0.0;
-        right_cover = 0.0
+        right_cover: float = 0.0
 #     unsigned int right_actual_count = 0;
-        right_actual_count = 0
+        right_actual_count: int = 0
 #     unsigned int right_min = numeric_limits<unsigned int>::max();
-        right_min = 1000000
+        right_min: int = 1000000
 #     unsigned int right_max = numeric_limits<unsigned int>::min();
-        right_max = -1000000
+        right_max: int = -1000000
 #     float right_mean = 0.0;
-        right_mean = 0.0
+        right_mean: float = 0.0
 #     vector<unsigned int> right_distribution;
-        right_distribution = []
+        right_distribution: list[int] = []
 
 #     for (unsigned int i=0; i<_right_count; i++){
         for i in range(self._right_count):
@@ -4994,29 +5200,31 @@ class StatisticsMT:
         pass  # end of report
     @staticmethod
 # statistics_m_t * statistics_m_t::parse (const model * mdl, const string & line){
-    def parse(mdl, line):
+    def parse(mdl, line: str):
         """
 
         Args:
+            mdl:
+            line (str):
 
         Returns:
 
         """
 #     string subject_type ('');
-        subject_type = ''
+        subject_type: str = ''
 #     string predicate ("");
-        predicate = ''
+        predicate: str = ''
 #     string object_type ("");
-        object_type = ''
+        object_type: str = ''
 #     string * subject_type_restriction = NULL;
-        subject_type_restriction = None
+        subject_type_restriction: str = ''
 #     string * object_type_restriction = NULL;
-        object_type_restriction = None
+        object_type_restriction: str = ''
 
 #     stringstream parser(line);
-        parser = parse_line(line)
+        parser: list[str] = parse_line(line)
 #     int index = 0;
-        index = 0
+        index: int = 0
 #     string token;
 #     while (parser>>token){
         for token in parser:
@@ -5055,9 +5263,9 @@ class StatisticsMT:
 #                 if (!boost::starts_with(token, "@")){
                 if token.startswith('@'):
 #                     cerr<<"[statistics_m_t::parse()]\tExpecting '@' qualifier before type restriction..."<<"\n";
-                    print('[statistics_m_t::parse()]\tExpecting '@' qualifier before type restriction...')
+                    print("[statistics_m_t::parse()]\tExpecting '@' qualifier before type restriction...")
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error
 #                 }
 #                 if (token.compare("@null")!=0 && token.compare("@NULL")!=0){
                 if token.find('@null') < 0 and token.find('@NULL') < 0:
@@ -5071,9 +5279,9 @@ class StatisticsMT:
 #                 if (!boost::starts_with(token, "@")){
                 if token.startswith('@'):
 #                     cerr<<"[statistics_m_t::parse()]\tExpecting '@' qualifier before type restriction..."<<"\n";
-                    print('[statistics_m_t::parse()]\tExpecting '@' qualifier before type restriction...')
+                    print("[statistics_m_t::parse()]\tExpecting '@' qualifier before type restriction...")
 #                     exit(0);
-                    sys.exit(0)
+                    sys.exit(0)  # error
 #                 }
 #                 if (token.compare("@null")!=0 && token.compare("@NULL")!=0){
                 if token.find('@null') < 0 and token.find('@NULL') < 0:
@@ -5101,7 +5309,7 @@ class StatisticsMT:
 #         cerr<<"[statistics_m_t::parse()]\tExpecting 3 or 5 arguments..."<<"\n";
             print('[statistics_m_t::parse()]\tExpecting 3 or 5 arguments...')
 #         exit(0);
-            sys.exit(0)
+            sys.exit(0)  # error
 #     }
 #     delete subject_type_restriction;
 #     delete object_type_restriction;
@@ -5123,8 +5331,10 @@ class Model:
 
     def __init__(self, filename: str):
         """
+        Read model file and create an instance of Model class.
 
         Args:
+            filename (str):  Path to model file.
 
         Returns:
 
@@ -5143,7 +5353,7 @@ class Model:
         self._type_map: TypeMap = TypeMap()
         #     srand (time(NULL));
         #     parse(filename);
-        self.parse(filename)
+        self.parse(filename)  # read a model file
     # }
         pass
 
@@ -5159,8 +5369,10 @@ class Model:
 # void model::generate (int scale_factor){
     def generate(self, scale_factor: int):
         """
+        Generate model from a model info
 
         Args:
+            scale_factor (int):
 
         Returns:
 
@@ -5172,7 +5384,7 @@ class Model:
 #         for (vector<resource_m_t*>::iterator itr2=_resource_array.begin(); itr2!=_resource_array.end(); itr2++){
             for itr2 in self._resource_array:
 #             resource_m_t * resource = *itr2;
-                resource = itr2
+                resource: ResourceMT = itr2
 #             if (i==0 || resource->_scalable){
                 if i == 0 or resource._scalable:
 #                 resource->generate(_namespace_map, _id_cursor_map);
@@ -5198,9 +5410,9 @@ class Model:
 #     boost::posix_time::ptime t3 (bpt::microsec_clock::universal_time());
 
 #     for (vector<resource_m_t*>::iterator itr1=_resource_array.begin(); itr1!=_resource_array.end(); itr1++){
-        for itr1 in self._resource_array:
+        for itr1 in self._resource_array:  # resource
 #         resource_m_t * resource = *itr1;
-            resource = itr1
+            resource: ResourceMT = itr1
 #         resource->process_type_restrictions(_namespace_map, _type_map, _id_cursor_map);
             resource.process_type_restrictions(self._namespace_map, self._type_map, self._id_cursor_map)
 #     }
@@ -5209,9 +5421,9 @@ class Model:
 #     boost::posix_time::ptime t4 (bpt::microsec_clock::universal_time());
 
 #     for (vector<association_m_t*>::iterator itr1=_association_array.begin(); itr1!=_association_array.end(); itr1++){
-        for itr1 in self._association_array:
+        for itr1 in self._association_array:  # association
 #         association_m_t * association = *itr1;
-            association = itr1
+            association: AssociationMT = itr1
 #         association->process_type_restrictions(_namespace_map, _type_map, _id_cursor_map);
             association.process_type_restrictions(self._namespace_map, self._type_map, self._id_cursor_map)
 #     }
@@ -5227,16 +5439,17 @@ class Model:
         pass  # end of model::generate
 
 # void model::compute_statistics (const vector<triple_st> & triples){
-    def compute_statistics(self, triples):
+    def compute_statistics(self, triples: list[TripleST]):
         """
 
         Args:
+            triples (list[TripleST]):
 
         Returns:
 
         """
 #     vector<statistics_m_t*> statistics_array;
-        statistics_array = []
+        statistics_array: list[StatisticsMT] = []
 #     for (vector<string>::iterator itr=_statistics_lines.begin(); itr!=_statistics_lines.end(); itr++){
         for itr in self._statistics_lines:
 #         statistics_m_t * statistics = statistics_m_t::parse(this, *itr);
@@ -5266,46 +5479,49 @@ class Model:
 #         }
 #     }
 # }
-        pass
+        pass  # end of compute_statistics
 
 # void model::parse (const char * filename){
-    def parse(self, filename):
+    def parse(self, filename: str):
         """
+        Read a model file and create a model instance.
 
         Args:
+            filename (str): Path to a model file.
 
         Returns:
 
         """
 #     stack<pair<short,void*> > object_stack;
-        object_stack = []
+        object_stack: list[tuple[int, any]] = []  # temporary storage
 #     ifstream fis (filename);
         with open(filename, 'r') as fis:
-            lines = fis.readlines()
+            lines: list[str] = fis.readlines()  # read all the lines at once
 #     string line;
 #     while (fis.good() && !fis.eof()){
             for line in lines:
                 line = line.replace('\n', '')
+                line = line.strip()
 #         getline(fis, line);
 #         if (boost::starts_with(line, "//")){
-                if line.startswith('//'):
+                if line.startswith('//'):  # comment line
 #             // Ignore the line, it is a comment...
-                    pass
+                    pass  # skip comment lines
 #         } else if (boost::starts_with(line, "#namespace")){
-                elif line.startswith('#namespace'):
+                elif line.startswith('#namespace'):  # e.g., #namespace	dc=http://purl.org/dc/terms/
 #             namespace_m_t * namespace_declaration = namespace_m_t::parse(line);
-                    namespace_declaration = NamespaceMT.parse(line)
+                    namespace_declaration: NamespaceMT = NamespaceMT.parse(line)  # create an instance from a line
 #             _namespace_map.insert(*namespace_declaration);
-                    self._namespace_map.insert(namespace_declaration=namespace_declaration)
+                    self._namespace_map.insert(namespace_declaration=namespace_declaration)  # store namespace info in _namespace_map instance
 #             delete namespace_declaration;
 #         } else if (boost::starts_with(line, "#predicate")){
-                elif line.startswith('#predicate'):
+                elif line.startswith('#predicate'):  # #predicate is within <pgroup> </pgroup> tag
 #             predicate_m_t * predicate = predicate_m_t::parse(line);
-                    predicate = PredicateMT.parse(line)
+                    predicate = PredicateMT.parse(line)  # process #predicate declaration, e.g., #predicate	sorg:contentRating	integer	6 18
 #             object_stack.push(pair<short,void*>(2, (void*)predicate));
-                    object_stack.append((2, predicate))
+                    object_stack.append((2, predicate))  # predicate is temporarily stored with a tag of 2
 #         } else if (boost::starts_with(line, "<pgroup>")){
-                elif line.startswith('<pgroup>'):
+                elif line.startswith('<pgroup>'):  # e.g., <pgroup>	1.0
 #             predicate_group_m_t * predicate_group = predicate_group_m_t::parse(line);
                     predicate_group = PredicateGroupMT.parse(line)
 #             object_stack.push(pair<short,void*>(1, (void*)predicate_group));
@@ -5313,7 +5529,7 @@ class Model:
 #         } else if (boost::starts_with(line, "</pgroup>")){
                 elif line.startswith('</pgroup>'):
 #             vector<predicate_m_t*> array;
-                    array = []
+                    array = []  # copy info within pgroup into array
 #             while (object_stack.top().first!=1){
                     while object_stack[-1][0] != 1:
 #                 array.push_back((predicate_m_t * ) object_stack.top().second);
@@ -5322,11 +5538,11 @@ class Model:
                         object_stack = object_stack[:-1]
 #             }
 #             predicate_group_m_t * predicate_group = (predicate_group_m_t *) object_stack.top().second;
-                    predicate_group = object_stack[-1][1]
+                    predicate_group = object_stack[-1][1]  # info on predicate group
 #             predicate_group->_predicate_array.insert(predicate_group->_predicate_array.begin(), array.begin(), array.end());
-                    predicate_group._predicate_array = array + predicate_group._predicate_array
+                    predicate_group._predicate_array = array + predicate_group._predicate_array  # transfer info within a predicate group into the array in an instance
 #         } else if (boost::starts_with(line, "<type")){
-                elif line.startswith('<type'):
+                elif line.startswith('<type'):  # process the <type> of <type*> tags, e.g., <type>		wsdbm:Retailer 12
 #             resource_m_t * resource = resource_m_t::parse(line);
                     resource = ResourceMT.parse(line)
 #             object_stack.push(pair<short,void*>(0, (void*)resource));
@@ -5334,7 +5550,7 @@ class Model:
 #         } else if (boost::starts_with(line, "</type>")){
                 elif line.startswith('</type>'):
 #             vector<predicate_group_m_t*> array;
-                    array = []
+                    array = []  # extract info contained in <type>
 #             while (object_stack.top().first!=0){
                     while len(object_stack) > 0 and object_stack[-1][0] != 0:
 #                 array.push_back((predicate_group_m_t * ) object_stack.top().second);
@@ -5347,9 +5563,9 @@ class Model:
 #             resource->_predicate_group_array.insert(resource->_predicate_group_array.begin(), array.begin(), array.end());
                     resource._predicate_group_array = array + resource._predicate_group_array
 #         } else if (boost::starts_with(line, "#association")){
-                elif line.startswith('#association'):
+                elif line.startswith('#association'):  # e.g., #association	wsdbm:SubGenre	rdf:type		wsdbm:Genre		2 1		1.0	UNIFORM
 #             association_m_t * association = association_m_t::parse(_id_cursor_map, line);
-                    association = AssociationMT.parse(line)
+                    association: AssociationMT = AssociationMT.parse(line)
 #             _association_array.push_back(association);
                     self._association_array.append(association)
 #         } else if (boost::starts_with(line, "#statistics")){
@@ -5360,7 +5576,7 @@ class Model:
 #     }
 #     fis.close();
 #     while (!object_stack.empty()){
-        while len(object_stack) > 0:
+        while len(object_stack) > 0:  # remainder of object_stack is stored in _resource_array
 #         _resource_array.push_back((resource_m_t *) object_stack.top().second);
             self._resource_array.append(object_stack[-1][1])
 #         object_stack.pop();
@@ -5375,25 +5591,29 @@ class Model:
         """
 
         Args:
+            literal_type:
+            distribution_type:
+            range_min:
+            range_max:
 
         Returns:
 
         """
 #     string literal = "";
-        literal = ''
+        literal: str = ''
 #     switch (literal_type){
 #         case LITERAL_TYPES::INTEGER:{
         if literal_type == LiteralTypes.INTEGER:
 #             int min_value = boost::lexical_cast<int>(range_min);
-            min_value = int(range_min)
+            min_value: int = int(range_min)
 #             int max_value = boost::lexical_cast<int>(range_max);
-            max_value = int(range_max)
+            max_value: int = int(range_max)
 #             int interval = max_value - min_value;
-            interval = max_value - min_value
+            interval: int = max_value - min_value
 #             double r_value = model::generate_random(distribution_type);
-            r_value = Model.generate_random(distribution_type)
+            r_value: float = Model.generate_random(distribution_type)
 #             int offset = round(r_value * interval);
-            offset = round(r_value * interval)
+            offset: int = round(r_value * interval)
 #             offset = (offset<0) ? 0 : offset;
             if offset < 0:
                 offset = 0
@@ -5461,14 +5681,16 @@ class Model:
 #     return literal;
         return literal
 # }
-        pass
+        pass  # end of generate_literal
 
     @staticmethod
 # double model::generate_random (DISTRIBUTION_TYPES::enum_t distribution_type, int item_count){
-    def generate_random(distribution_type, item_count=None):
+    def generate_random(distribution_type, item_count: int = None):
         """
 
         Args:
+            distribution_type (DistributionTypes):
+            item_count (int):
 
         Returns:
 
@@ -5479,6 +5701,7 @@ class Model:
             """
 
             Args:
+                item_count (int):
 
             Returns:
 
@@ -5495,7 +5718,7 @@ class Model:
             #         double offset = 0.0;
                 offset = 0.0
             #         for (int i=1; i<=item_count; i++){
-                for i in range(1, item_count):
+                for i in range(1, item_count+1):
             #             offset += 1.0 / ((double) (i));
                     offset += 1.0 / float(i)
             #             intervals->push_back(offset);
@@ -5506,10 +5729,13 @@ class Model:
             #         for (int cursor=0; cursor<item_count; cursor++){
                 for cursor in range(item_count):
             #             (*intervals)[cursor] = (*intervals)[cursor] * scale_factor;
-                    intervals[cursor] *= scale_factor
+                    try:
+                        intervals[cursor] *= scale_factor
+                    except IndexError:
+                        pass  # error
             #         }
             #         zipfian_cache.insert(pair<int, vector<double>*>(item_count, intervals));
-                    zipfian_cache[item_count] = intervals
+                    Model.zipfian_cache[item_count] = intervals
             #     } else {
 
             #         intervals = zipfian_cache[item_count];
@@ -5524,10 +5750,10 @@ class Model:
             #     return result;
             return result
             # }
-            pass
+            pass  # end of generate_zipfian
 
 #     double result = 0.0;
-        result = 0.0
+        result: float = 0.0
 #     switch (distribution_type){
 #         case DISTRIBUTION_TYPES::UNIFORM:{
         if distribution_type == DistributionTypes.UNIFORM:
@@ -5538,8 +5764,8 @@ class Model:
 #         case DISTRIBUTION_TYPES::NORMAL:{
         elif distribution_type == DistributionTypes.NORMAL:
 #             result = BOOST_NORMAL_DIST_GEN();
-            xxx = np.random.normal(0.5, 0.5/3.0, 1)
-            result = xxx[0]
+            xxx: float = np.random.normal(0.5, 0.5/3.0)
+            result = xxx
 #             break;
 #         }
 #         case DISTRIBUTION_TYPES::ZIPFIAN:{
@@ -5586,19 +5812,21 @@ class Model:
 #     zipfian_cache.clear();
         Model.zipfian_cache = {}
 # }
-        pass
+        pass  # end of clear_zipfian_cache
 
 # void model::load (const char * filename){
-    def load(self, filename):
+    def load(self, filename: str):
         """
+        Read model info from saved.txt into _id_cursor_map and _type_map dicts.
 
         Args:
+            filename (str): filen name (saved.txt)
 
         Returns:
 
         """
 #     _id_cursor_map.clear();
-        self._id_cursor_map = {}
+        self._id_cursor_map = {}  # read in items are _id_cursor_map and _type_map
 #     _type_map.clear();
         self._type_map = {}
 #
@@ -5607,49 +5835,49 @@ class Model:
 #     int lCount = -1;
             l_count = -1
 #     string line, token;
-            lines = fis.readlines()
+            lines: list[str] = fis.readlines()  # read all the lines at once
 #     getline(fis, line);
-            line = lines[0]
+            line = lines[0]  # contains the number of _id_cursor_map
             lines = lines[1:]
 #     lCount = boost::lexical_cast<int>(line);
-            l_count = int(line)
+            l_count = int(line)  # number of _id_cursor_map
 #     for (int i=0; i<lCount; i++){
             for i in range(l_count):
 #         getline(fis, line);
-                line = lines[0]
+                line = lines[0]  # wsdbm:User 1000
                 lines = lines[1:]
 #         stringstream parser(line);
-                parser = line.split(' ')
+                parser = line.split(' ')  # split the line
 #         parser>>token;
                 token = parser[0]
 #         string key = token;
-                key = token
+                key = token  # wsdbm:User
 #         parser>>token;
                 token = parser[1]
 #         unsigned int value = boost::lexical_cast<unsigned int>(token);
-                value = int(token)
+                value = int(token)  # 1000
 #         _id_cursor_map.insert(pair<string, unsigned int>(key, value));
-                self._id_cursor_map[key] = value
+                self._id_cursor_map[key] = value  # save in _id_cursor_map
 #     }
 
 #     getline(fis, line);
-            line = lines[0]
+            line = lines[0]  # number of _type_map
             lines = lines[1:]
 #     lCount = boost::lexical_cast<int>(line);
-            l_count = int(line)
+            l_count = int(line)  # number of _type_map
 #     for (int i=0; i<lCount; i++){
             for i in range(l_count):
 #         getline(fis, line);
                 line = lines[0]
                 lines = lines[1:]
 #         stringstream parser(line);
-                parser = line.split(' ')
+                parser = line.split(' ')  # split the line
 #         parser>>token;
                 token = parser[0]
 #         string type = token;
-                type = token
+                type = token  # ProductCategory
 #         while (parser>>token){
-                for token in parser[1:]:
+                for token in parser[1:]:  # Product
 #             _type_map.insert(token, type);
                     self._type_map[token] = type
 #         }
@@ -5675,39 +5903,41 @@ class Model:
         pass  # end of load
 
 # void model::save (const char * filename) const{
-    def save(self, filename):
+    def save(self, filename: str):
         """
+        Save the model info into saved.txt.
 
         Args:
+            filename (str): file name of saved.txt
 
         Returns:
 
         """
 #     ofstream fos (filename);
-        lines = []
+        lines: list[str] = []
         # with open(filename, 'w') as fos:
 
 #     fos<<_id_cursor_map.size()<<"\n";
 #             fos.write(str(len(self._id_cursor_map)))
-        lines.append(str(len(self._id_cursor_map))+'\n')
+        lines.append(str(len(self._id_cursor_map))+'\n')  # first save the id_cursor_map length
 #     for (map<string, unsigned int>::const_iterator itr1=_id_cursor_map.cbegin(); itr1!=_id_cursor_map.cend(); itr1++){
         for itr1_key, itr1_value in self._id_cursor_map.items():
 #         fos<<itr1->first<<" "<<boost::lexical_cast<string>(itr1->second)<<"\n";
 #             fos.write(itr1.first, itr1.second)
-            lines.append(str(itr1_key)+' '+str(itr1_value)+'\n')
+            lines.append(str(itr1_key)+' '+str(itr1_value)+'\n')  # save in the form of a pair of key and value in one line
 #     }
             pass  # end of for
         with open(filename, 'w') as fos:
-            fos.writelines(lines)
+            fos.writelines(lines)  # write the _id_cursor_map
     #     vector<string> lines;
 #     _type_map.to_str(lines);
-            lines = self._type_map.to_str()
+            lines = self._type_map.to_str()  # at the second step save the type map
 #     fos<<lines.size()<<"\n";
-            fos.write(str(len(lines))+'\n')
+            fos.write(str(len(lines))+'\n')  # number of lines
 #     for (vector<string>::iterator itr1=lines.begin(); itr1!=lines.end(); itr1++){
             for itr1 in lines:
 #         fos<<*itr1<<"\n";
-                fos.write(itr1+'\n')
+                fos.write(itr1+'\n')  # write line by line
 #     }
         pass  # end of save
 
@@ -5724,62 +5954,65 @@ class Model:
 
 #     fos.close();
 # }
-    pass
+    pass  # end of Model
 
 
 # int main(int argc, const char* argv[]) {
-def main():
+def main(argv: list[str]):
     """
     Main entry point to start the whole program.
 
     Args:
-        arguments are given from command line.
+        Arguments are given from command line.
+
     Returns:
 
     """
-    argv = sys.argv  # arguments are given from command line.
+    # argv = sys.argv  # arguments are given from command line.
 #     dictionary * dict = dictionary::get_instance();
     dict0: Dictionary = Dictionary.get_instance()  # create an instance of Dictionary class
 #     string xxx = argv[1];  ////
-    argc = len(argv)  # number of arguments. argv[0] holds the program name.
+    argc: int = len(argv)  # number of arguments. argv[0] holds the program name.
 #     if ( (argc==2 || argc==4 || argc==5 || argc>=6) && argv[1][0]=='-'){
     if (argc == 2 or argc == 4 or argc == 5 or argc >= 6) and argv[1][0] == '-':
 #         dict->init("/usr/share/dict/words", "./data/files/firstnames.txt", "./data/files/lastnames.txt");
         dict0.init('/usr/share/dict/words', './data/files/firstnames.txt', './data/files/lastnames.txt')  # initialize the dictionary instance
 #         const char * model_filename = argv[2];
-        model_filename = argv[2]  # file name of the model
+        model_filename: str = argv[2]  # file name of the model
 #         model cur_model (model_filename);
-        cur_model = Model(model_filename)  # read the model
+        cur_model: Model = Model(model_filename)  # read the model
 #         // statistics stat (cur_model);
+
 #         if (argc==4 && argv[1][0]=='-' && argv[1][1]=='d'){
         if argc == 4 and argv[1] == '-d':  # '-d' for preparing saved.txt
 #             unsigned int scale_factor = boost::lexical_cast<unsigned int>(string(argv[3]));
-            scale_factor = int(argv[3])
+            scale_factor: int = int(argv[3])
 #             cur_model.generate(scale_factor);
             cur_model.generate(scale_factor)
 #             cur_model.save("saved.txt");
-            cur_model.save('./data/saved.txt')
+            cur_model.save('./data/saved.txt')  # save randomly generated setting
 #             //statistics stat (&cur_model, triples);
 #             // dictionary::destroy_instance();
 #             return 0;
-            return 0
+            return 0  # end for '-d' option
+
 #         } else if (argc==5 && argv[1][0]=='-' && argv[1][1]=='q'){
         elif argc == 5 and argv[1] == '-q':  # '-q' for generating the instances of queries from query templates
 #             cur_model.load("saved.txt");
             cur_model.load('./data/saved.txt')
 #             unsigned int query_count = boost::lexical_cast<unsigned int>(string(argv[(argc-2)]));
-            query_count = int(str(argv[(argc-2)]))
+            query_count: int = int(str(argv[(argc-2)]))
 #             unsigned int recurrence_factor = boost::lexical_cast<unsigned int>(string(argv[(argc-1)]));
-            recurrence_factor = int(str(argv[(argc-1)]))
+            recurrence_factor: int = int(str(argv[(argc-1)]))
 #             vector<string> workload;
             workload: list[str] = []
 #             string line, qTemplateStr = "";
-            qTemplateStr = ''
+            qTemplateStr: str = ''
 #             while (getline(cin, line)){
             while True:
                 line = input()
 #                 if (boost::starts_with(line, "#end")){
-                if line.startswith('#end'):
+                if line.startswith('#end'):  # when reaching the #end start the processing
 #                     query_template_m_t q_template (&cur_model);
                     q_template = QueryTemplateMT(cur_model)
 #                     q_template.parse_str(qTemplateStr);
@@ -5809,7 +6042,8 @@ def main():
 #             }
 #             dictionary::destroy_instance();
 #             return 0;
-            return 0
+            return 0  # end of '-q' template is read from command line
+
 #         } else if (argc>=6 && argv[1][0]=='-' && argv[1][1]=='q'){
         elif argc >= 6 and argv[1] == '-q':  # '-q' for generating the instances of queries from query templates
 #             cur_model.load("saved.txt");
@@ -5837,13 +6071,14 @@ def main():
 #             //shuffle (workload.begin(), workload.end(), std::default_random_engine(seed));
 #
 #             for (int qid=0; qid<workload.size(); qid++){
-                for query in workload:
+            for query in workload:
 #                 cout<<workload[qid];
-                    print(query)
+                print(query)
 #             }
 #             // dictionary::destroy_instance();
 #             return 0;
-            return 0
+            return 0  # end of '-q' option. Query template is read from files.
+
 #         } else if (argc==6 && argv[1][0]=='-' && argv[1][1]=='s'){
         elif argc == 6 and argv[1] == '-s':  # '-s' generates query templates
 #             cur_model.load("saved.txt");
@@ -5851,48 +6086,51 @@ def main():
 #             vector<triple_st> triple_array = triple_st::parse_file(argv[3]);
             triple_array = TripleST.parse_file(argv[3])  # create an instance of TripleST class
 #             int maxQSize = boost::lexical_cast<int>(argv[4]);
-            maxQSize = int(argv[4])  # max number of triples in a query
+            max_q_size: int = int(argv[4])  # max number of triples in a query
 #             int qCount = boost::lexical_cast<int>(argv[5]);
-            qCount = int(argv[5])  # number of queries to be generated
+            q_count: int = int(argv[5])  # number of queries to be generated
 #             // statistics stat (&cur_model, triple_array, maxQSize, qCount, 1, false, false);
-            Statistics(cur_model, triple_array, maxQSize, qCount, 1, False, False)  # generate and print query templates
+            Statistics(cur_model, triple_array, max_q_size, q_count, 1, False, False)  # generate and print query templates
 #             // dictionary::destroy_instance();
 #             return 0;
             return 0
+
 #         } else if (argc==7 && argv[1][0]=='-' && argv[1][1]=='s'){
         elif argc == 7 and argv[1] == '-s':  # '-s' with an additional argument of constCount
 #             cur_model.load("saved.txt");
-            cur_model.load('./data/saved.txt')
+            cur_model.load('./data/saved.txt')  # all the info of model is saved in this file
 #             vector<triple_st> triple_array = triple_st::parse_file(argv[3]);
-            triple_array = TripleST.parse_file(argv[3])
+            triple_array: list[TripleST] = TripleST.parse_file(argv[3])
 #             int maxQSize = boost::lexical_cast<int>(argv[4]);
-            maxQSize = int(argv[4])
+            max_q_size: int = int(argv[4])
 #             int qCount = boost::lexical_cast<int>(argv[5]);
-            qCount = int(argv[5])
+            q_count: int = int(argv[5])
 #             int constCount = boost::lexical_cast<int>(argv[6]);
-            constCount = int(argv[6])
+            const_count: int = int(argv[6])
 #             // statistics stat (&cur_model, triple_array, maxQSize, qCount, constCount, false, false);
-            Statistics(cur_model, triple_array, maxQSize, qCount, constCount, False, False)
+            Statistics(cur_model, triple_array, max_q_size, q_count, const_count, False, False)
 #             // dictionary::destroy_instance();
 #             return 0;
             return 0
+
 #         } else if (argc==8 && argv[1][0]=='-' && argv[1][1]=='s'){
         elif argc == 8 and argv[1] == '-s':  # '-s' with an additional argument of constant-join-vertex-allowed?
 #             cur_model.load("saved.txt");
             cur_model.load('./data/saved.txt')
 #             vector<triple_st> triple_array = triple_st::parse_file(argv[3]);
-            triple_array: TripleST = TripleST.parse_file(argv[3])
+            triple_array: list[TripleST] = TripleST.parse_file(argv[3])
 #             int maxQSize = boost::lexical_cast<int>(argv[4]);
-            maxQSize: int = int(argv[4])
+            max_q_size: int = int(argv[4])
 #             int qCount = boost::lexical_cast<int>(argv[5]);
-            qCount: int = int(argv[5])
+            q_count: int = int(argv[5])
 #             int constCount = boost::lexical_cast<int>(argv[6]);
-            constCount: int = int(argv[6])
+            const_count: int = int(argv[6])
 #             // statistics stat (&cur_model, triple_array, maxQSize, qCount, constCount, argv[7][0]=='t', false);
-            Statistics(cur_model, triple_array, maxQSize, qCount, constCount, argv[7][0]=='t', False)
+            Statistics(cur_model, triple_array, max_q_size, q_count, const_count, argv[7][0]=='t', False)
 #             // dictionary::destroy_instance();
 #             return 0;
             return 0
+
 #         } else if (argc==9 && argv[1][0]=='-' && argv[1][1]=='s'){
         elif argc == 9 and argv[1] == '-s':  # '-s' with an additional argument of duplicate-edges-allowed? give 't'.
 #             cur_model.load("saved.txt");
@@ -5900,16 +6138,17 @@ def main():
 #             vector<triple_st> triple_array = triple_st::parse_file(argv[3]);
             triple_array = TripleST.parse_file(argv[3])
 #             int maxQSize = boost::lexical_cast<int>(argv[4]);
-            maxQSize = int(argv[4])
+            max_q_size: int = int(argv[4])
 #             int qCount = boost::lexical_cast<int>(argv[5]);
-            qCount = int(argv[5])
+            q_count: int = int(argv[5])
 #             int constCount = boost::lexical_cast<int>(argv[6]);
-            constCount = int(argv[6])
+            const_count: int = int(argv[6])
 #             // statistics stat (&cur_model, triple_array, maxQSize, qCount, constCount, argv[7][0]=='t', argv[8][0]=='t');
-            Statistics(cur_model, triple_array, maxQSize, qCount, constCount, argv[7][0] == 't', argv[8][0] == 't')
+            Statistics(cur_model, triple_array, max_q_size, q_count, const_count, argv[7][0] == 't', argv[8][0] == 't')
 #             // dictionary::destroy_instance();
 #             return 0;
             return 0
+
 #         } else if (argc==2 && argv[1][0]=='-' && argv[1][1]=='x'){
         elif argc == 2 and argv[1] == '-x':  # for test.
 #             // volatility_gen::test();
@@ -5922,7 +6161,7 @@ def main():
         return 0
 #     }
         pass  # end of if statement
-    else:
+    else:  # invalid input arguments, print usage
 #     std::cout<<"Usage:::\t./watdiv -d <model-file> <scale-factor>"<<"\n";
         print('Usage:::\t./watdiv -d <model-file> <scale-factor>')
 #     std::cout<<"Usage:::\t./watdiv -q <model-file> <query-count> <recurrence-factor>"<<"\n";
@@ -5939,10 +6178,13 @@ def main():
 #     //cout<<"        \t./watdiv -s <model-file> <dataset-file> <max-query-size> <query-count> <constant-per-query-count> <constant-join-vertex-allowed?> <duplicate-edges-allowed?>"<<"\n";
 #     // dictionary::destroy_instance();
 #     return 0;
-        return 0
+    return -1  # failed return
 # }
     pass
 
 
 if __name__ == '__main__':
-    main()  # call the main entry point of the program
+    argv = ['watdiv', '-d', './data/model/wsdbm-data-model.txt', '1']  # option -d
+    # argv = ['watdiv', '-q', './data/model/wsdbm-data-model.txt', './data/testsuite/linear_incremental/test_template.txt', '4', '1']  # option -q
+    # argv = ['watdiv', '-s', './data/model/wsdbm-data-model.txt', '../watdiv.10M.nt', '6', '10', '3']  # option -s
+    main(argv)  # call the main entry point of the program

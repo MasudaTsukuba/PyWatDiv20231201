@@ -1,6 +1,10 @@
-# statistics.py
-# Python version of WatDiv/statistics
-# T. Masuda, 2023/12/1
+"""
+statistics.py
+Python version of WatDiv/statistics
+T. Masuda, 2023/12/1
+The codes in this file have been moved to model.py
+"""
+
 import random
 from enum import Enum, auto
 # #include "statistics.h"

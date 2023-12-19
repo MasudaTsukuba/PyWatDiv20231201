@@ -1,0 +1,4 @@
+#mapping v0 talk:speaker uniform
+SELECT ?v1 WHERE {
+	%v0%	rdfs:label	?v1 .
+}

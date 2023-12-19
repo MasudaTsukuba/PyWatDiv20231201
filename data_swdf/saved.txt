@@ -1,0 +1,9 @@
+4
+onto:Presenter 3
+talk:speaker 5
+rdfs:label 20
+foaf:name 10
+3
+http://data.semanticweb.org/ns/swc/ontology#Presenter2 http://data.semanticweb.org/conference/www/2012/phd/28/talk/speaker0 
+http://data.semanticweb.org/ns/swc/ontology#Presenter1 http://data.semanticweb.org/conference/www/2012/phd/28/talk/speaker4 http://data.semanticweb.org/conference/www/2012/phd/28/talk/speaker1 
+http://data.semanticweb.org/ns/swc/ontology#Presenter0 http://data.semanticweb.org/conference/www/2012/phd/28/talk/speaker3 http://data.semanticweb.org/conference/www/2012/phd/28/talk/speaker2 
